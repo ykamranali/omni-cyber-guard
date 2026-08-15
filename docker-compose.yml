@@ -1,0 +1,95 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ocg-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ocg_user
+      POSTGRES_PASSWORD: ocg_password
+      POSTGRES_DB: omni_cyber_guard
+    ports:
+      - "5432:5432"
+    volumes:
+      - ocg_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ocg_user -d omni_cyber_guard"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ocg-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: ocg-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://ocg_user:ocg_password@postgres:5432/omni_cyber_guard
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+
+  worker:
+    build: ./backend
+    container_name: ocg-worker
+    restart: unless-stopped
+    command: celery -A app.core.celery_app worker --loglevel=info --concurrency=2
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://ocg_user:ocg_password@postgres:5432/omni_cyber_guard
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    # Network scans (nmap host/OS discovery) need raw-socket access. These
+    # capabilities only permit crafting/reading raw packets on networks this
+    # container can already reach — they do not grant host-level access.
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    # IMPORTANT (Linux hosts only): by default this container only sees the
+    # isolated Docker bridge network, NOT your physical LAN. To scan your
+    # actual home/office network (e.g. 192.168.1.0/24), uncomment the line
+    # below — this only works on native Linux Docker hosts. Docker Desktop
+    # on Windows/Mac does not support host networking reliably; on those
+    # platforms, run the worker natively instead (see README "Scanning your
+    # real LAN on Windows/Mac").
+    # network_mode: host
+
+  frontend:
+    build: ./frontend
+    container_name: ocg-frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  ocg_postgres_data:

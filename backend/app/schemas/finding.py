@@ -1,0 +1,35 @@
+import uuid
+from pydantic import BaseModel, ConfigDict
+from app.models.finding import Severity, FindingStatus
+
+
+class FindingOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    asset_id: uuid.UUID
+    title: str
+    description: str
+    cve_id: str | None
+    cvss_score: float | None
+    severity: Severity
+    status: FindingStatus
+    remediation_guidance: str
+    source: str
+
+
+class FindingCreate(BaseModel):
+    asset_id: uuid.UUID
+    title: str
+    description: str = ""
+    cve_id: str | None = None
+    cvss_score: float | None = None
+    severity: Severity = Severity.MEDIUM
+    remediation_guidance: str = ""
+    source: str = "manual"
+
+
+class FindingUpdate(BaseModel):
+    status: FindingStatus | None = None
+    is_false_positive: bool | None = None
+    remediation_guidance: str | None = None
