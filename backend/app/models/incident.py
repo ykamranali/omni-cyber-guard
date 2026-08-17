@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, Enum, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID
 
-from app.core.database import Base
+from app.db.session import Base
 from app.models.mixins import TimestampMixin
 
 class IncidentStatus(str, enum.Enum):
