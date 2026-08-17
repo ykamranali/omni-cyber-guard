@@ -271,19 +271,6 @@ export default function ScanCenterPage() {
                                     Stop Scan
                                   </button>
                                 )}
-                                {(s.status === "completed" || s.status === "failed") && (
-                                  <button
-                                    onClick={() => {
-                                      if (confirm("Are you sure you want to delete this scan? This will also permanently delete all associated assets and findings.")) {
-                                        deleteScan.mutate(s.id);
-                                      }
-                                    }}
-                                    disabled={deleteScan.isPending}
-                                    className="rounded border border-critical/50 bg-critical/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-critical hover:bg-critical/20"
-                                  >
-                                    {deleteScan.isPending ? "Deleting..." : "Delete Scan"}
-                                  </button>
-                                )}
                               </div>
                             </div>
                             <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap text-green-400">
