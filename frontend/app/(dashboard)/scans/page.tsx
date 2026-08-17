@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Radar, Loader2, CheckCircle2, XCircle, Circle, ShieldAlert, Server, ChevronDown, ChevronUp,
+  Radar, Loader2, CheckCircle2, XCircle, Circle, ShieldAlert, Server, ChevronDown, ChevronUp, Trash2
 } from "lucide-react";
 
 import { Topbar } from "@/components/layout/topbar";
@@ -232,6 +232,18 @@ export default function ScanCenterPage() {
                           <span className={`text-xs font-medium ${meta.color}`}>{meta.label}</span>
                           {expandedId === s.id ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
                         </div>
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm("Are you sure you want to delete this scan?")) {
+                            deleteScan.mutate(s.id);
+                          }
+                        }}
+                        disabled={deleteScan.isPending}
+                        className="rounded-md p-1.5 text-muted hover:bg-critical/10 hover:text-critical"
+                        title="Delete Scan"
+                      >
+                        <Trash2 size={15} />
                       </button>
                     </div>
 

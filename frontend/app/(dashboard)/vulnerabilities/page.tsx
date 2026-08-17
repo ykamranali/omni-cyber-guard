@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ShieldAlert, ExternalLink } from "lucide-react";
+import { ShieldAlert, ExternalLink, Trash2 } from "lucide-react";
 
 import { Topbar } from "@/components/layout/topbar";
 import { Card } from "@/components/ui/card";
@@ -62,6 +62,13 @@ export default function VulnerabilitiesPage() {
       queryClient.invalidateQueries({ queryKey: ["findings"] });
       setSelectedFindingIds(new Set());
       setExpandedId(null);
+    },
+  });
+
+  const deleteFinding = useMutation({
+    mutationFn: (id: string) => api.delete(`/findings/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["findings"] });
     },
   });
 
@@ -184,6 +191,19 @@ export default function VulnerabilitiesPage() {
                         <div className="flex shrink-0 items-center gap-2">
                           <Badge label={f.severity} />
                           <Badge label={f.status} />
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm("Are you sure you want to delete this vulnerability?")) {
+                                deleteFinding.mutate(f.id);
+                              }
+                            }}
+                            disabled={deleteFinding.isPending}
+                            className="ml-2 rounded-md p-1 text-muted hover:bg-critical/10 hover:text-critical"
+                            title="Delete Vulnerability"
+                          >
+                            <Trash2 size={15} />
+                          </button>
                         </div>
                       </div>
 
