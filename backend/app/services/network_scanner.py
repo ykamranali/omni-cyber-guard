@@ -131,7 +131,7 @@ def run_discovery_and_service_scan(
     
     # -v enables verbose mode so Nmap prints "Discovered open port" and "Discovered host" live
     # -O enables OS detection, --script vuln,default enables NSE scripting
-    cmd = ["nmap", "-sV", "-O", "--script", "vuln,default", "-F", "-T4", "--max-retries", "1", "--host-timeout", "5m", "-v", "-oX", xml_path, str(network)]
+    cmd = ["nmap", "-sV", "-O", "--osscan-guess", "--script", "vuln,default", "-F", "-T4", "--max-retries", "1", "--host-timeout", "5m", "-v", "-oX", xml_path, str(network)]
     
     try:
         proc = subprocess.Popen(

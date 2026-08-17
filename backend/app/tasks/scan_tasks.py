@@ -76,11 +76,21 @@ def run_network_scan(scan_job_id: str) -> None:
                 .first()
             )
             if not asset:
+                derived_type = AssetType.OTHER
+                if host.os_match:
+                    os_lower = host.os_match.lower()
+                    if "server" in os_lower or "linux" in os_lower or "bsd" in os_lower:
+                        derived_type = AssetType.SERVER
+                    elif "windows" in os_lower or "macos" in os_lower or "mac os" in os_lower:
+                        derived_type = AssetType.WORKSTATION
+                    elif "cisco" in os_lower or "router" in os_lower or "switch" in os_lower:
+                        derived_type = AssetType.NETWORK_DEVICE
+
                 asset = Asset(
                     organization_id=job.organization_id,
                     hostname=host.hostname or host.ip_address,
                     ip_address=host.ip_address,
-                    asset_type=AssetType.OTHER,
+                    asset_type=derived_type,
                     status=AssetStatus.ACTIVE,
                     operating_system=host.os_match,
                     tags=["discovered-by-scan"],
@@ -94,6 +104,13 @@ def run_network_scan(scan_job_id: str) -> None:
                     asset.hostname = host.hostname
                 if host.os_match:
                     asset.operating_system = host.os_match
+                    os_lower = host.os_match.lower()
+                    if "server" in os_lower or "linux" in os_lower or "bsd" in os_lower:
+                        asset.asset_type = AssetType.SERVER
+                    elif "windows" in os_lower or "macos" in os_lower or "mac os" in os_lower:
+                        asset.asset_type = AssetType.WORKSTATION
+                    elif "cisco" in os_lower or "router" in os_lower or "switch" in os_lower:
+                        asset.asset_type = AssetType.NETWORK_DEVICE
 
             if host.mac_address:
                 asset.mac_address = host.mac_address
