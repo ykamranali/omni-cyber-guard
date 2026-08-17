@@ -56,6 +56,13 @@ export default function ScanCenterPage() {
     onError: (err) => setError(err instanceof ApiError ? err.message : "Failed to start scan"),
   });
 
+  const cancelScan = useMutation({
+    mutationFn: (id: string) => api.post(`/scans/${id}/cancel`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["scans"] });
+    },
+  });
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     startScan.mutate();
@@ -160,10 +167,39 @@ export default function ScanCenterPage() {
                     </button>
 
                     {expandedId === s.id && (
-                      <div className="ml-7 mt-3 rounded-lg bg-surface-hover/40 p-3 text-sm text-ink/75">
-                        {s.status === "failed" && (s.error_message || "The scan failed for an unknown reason.")}
-                        {s.status === "completed" && (s.raw_summary || "No summary recorded.")}
-                        {(s.status === "queued" || s.status === "running") && "Scan is in progress — this page refreshes automatically."}
+                      <div className="ml-7 mt-3 rounded-lg bg-ink p-4 shadow-inner">
+                        {s.status === "failed" && (
+                          <div className="text-sm text-critical">
+                            {s.error_message || "The scan failed for an unknown reason."}
+                          </div>
+                        )}
+                        {(s.status === "queued" || s.status === "running" || s.status === "completed") && (
+                          <div className="font-mono text-xs">
+                            <div className="mb-2 flex items-center justify-between border-b border-white/10 pb-2 text-white/50">
+                              <div className="flex items-center gap-2">
+                                <Radar size={12} className={s.status === "running" ? "animate-pulse text-primary" : ""} />
+                                <span>Live Scan Terminal Feed</span>
+                              </div>
+                              {s.status === "running" && (
+                                <button
+                                  onClick={() => cancelScan.mutate(s.id)}
+                                  disabled={cancelScan.isPending}
+                                  className="rounded border border-critical/50 bg-critical/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-critical hover:bg-critical/20"
+                                >
+                                  Stop Scan
+                                </button>
+                              )}
+                            </div>
+                            <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap text-green-400">
+                              {s.raw_summary || (s.status === "queued" ? "Queued for scanning..." : "Initializing scan engine...")}
+                            </pre>
+                            {s.status === "running" && (
+                              <div className="mt-2 flex items-center gap-2 text-primary animate-pulse">
+                                <span className="h-2 w-2 rounded-full bg-primary" /> Scanning in progress...
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

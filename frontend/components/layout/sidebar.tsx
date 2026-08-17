@@ -4,24 +4,26 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Server, ShieldAlert, FileCheck2, FileBarChart2,
-  Settings, ShieldCheck, Users, Building2, ScrollText, BadgeDollarSign, Radar, Satellite,
+  Settings, ShieldCheck, Users, Building2, ScrollText, BadgeDollarSign, Radar, Satellite, BrainCircuit
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, enabled: true },
+  { href: "/ask-agent", label: "Ask Omni Agent", icon: BrainCircuit, enabled: true },
+  { href: "/network", label: "Network Map", icon: Radar, enabled: true },
   { href: "/assets", label: "Assets", icon: Server, enabled: true },
   { href: "/scans", label: "Scan Center", icon: Radar, enabled: true, requires: "scans" as const },
   { href: "/vulnerabilities", label: "Vulnerabilities", icon: ShieldAlert, enabled: true },
-  { href: "/compliance", label: "Compliance", icon: FileCheck2, enabled: false },
-  { href: "/reports", label: "Reports", icon: FileBarChart2, enabled: false },
-  { href: "/threat-intelligence", label: "Threat Intelligence", icon: Satellite, enabled: false },
+  { href: "/compliance", label: "Compliance", icon: FileCheck2, enabled: true },
+  { href: "/reports", label: "Reports", icon: FileBarChart2, enabled: true },
+  { href: "/threat-intelligence", label: "Threat Intelligence", icon: Satellite, enabled: true },
   { href: "/users", label: "Users", icon: Users, enabled: true, requires: "users" as const },
   { href: "/organizations", label: "Organizations", icon: Building2, enabled: true, requires: "super_admin" as const },
-  { href: "/settings", label: "Settings", icon: Settings, enabled: false },
-  { href: "/audit-logs", label: "Audit Logs", icon: ScrollText, enabled: false },
-  { href: "/licensing", label: "Licensing", icon: BadgeDollarSign, enabled: false },
+  { href: "/settings", label: "Settings", icon: Settings, enabled: true },
+  { href: "/audit-logs", label: "Audit Logs", icon: ScrollText, enabled: true },
+  { href: "/licensing", label: "Licensing", icon: BadgeDollarSign, enabled: true },
 ];
 
 export function Sidebar() {

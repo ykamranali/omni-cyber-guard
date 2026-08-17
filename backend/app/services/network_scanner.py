@@ -94,12 +94,15 @@ def nmap_available() -> bool:
     return shutil.which("nmap") is not None
 
 
-def run_discovery_and_service_scan(target_cidr: str, timeout_seconds: int = 600) -> list[ScannedHost]:
+def run_discovery_and_service_scan(
+    target_cidr: str, 
+    timeout_seconds: int = 600, 
+    progress_callback: callable = None
+) -> list[ScannedHost]:
     """
-    Runs `nmap -sV -O --osscan-guess` (service/version + best-effort OS
-    guess) against an authorized private CIDR range and parses the XML
-    output. Requires the `nmap` binary to be installed in the runtime
-    environment (see backend/Dockerfile).
+    Runs `nmap -sV -F` against an authorized private CIDR range and streams the
+    stdout in real-time, then parses the XML output. Requires the `nmap` binary
+    to be installed.
     """
     network = validate_authorized_target(target_cidr)
 
@@ -109,20 +112,48 @@ def run_discovery_and_service_scan(target_cidr: str, timeout_seconds: int = 600)
             "Install it (e.g. `apt-get install nmap`) or use the provided Docker image."
         )
 
-    cmd = ["nmap", "-sV", "--osscan-guess", "-O", "-T4", "-oX", "-", str(network)]
+    # We output XML to a file, and use normal stdout for streaming live progress
+    import tempfile
+    import os
+    
+    xml_fd, xml_path = tempfile.mkstemp(suffix=".xml")
+    os.close(xml_fd)
+    
+    # -v enables verbose mode so Nmap prints "Discovered open port" and "Discovered host" live
+    cmd = ["nmap", "-sV", "-F", "-T4", "--max-retries", "1", "--host-timeout", "5m", "-v", "-oX", xml_path, str(network)]
+    
     try:
-        proc = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout_seconds, check=False
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
+        
+        stdout_lines = []
+        if progress_callback:
+            progress_callback(f"Starting scan on {target_cidr}...")
+            
+        for line in proc.stdout:
+            stdout_lines.append(line)
+            if progress_callback:
+                if "Discovered" in line or "Scanning" in line:
+                    progress_callback(line.strip())
+
+        proc.wait(timeout=timeout_seconds)
+        
+        if proc.returncode not in (0, 1):
+            stderr = proc.stderr.read()
+            raise RuntimeError(f"nmap scan failed (exit {proc.returncode}): {stderr.strip()[:2000]}")
+            
+        with open(xml_path, "r") as f:
+            xml_content = f.read()
+            
+        return _parse_nmap_xml(xml_content)
+        
     except subprocess.TimeoutExpired as exc:
+        proc.kill()
         raise RuntimeError(f"Scan of {target_cidr} timed out after {timeout_seconds}s.") from exc
-
-    if proc.returncode not in (0, 1) or not proc.stdout.strip():
-        # nmap can return non-zero with partial XML on some permission errors (e.g. no raw socket
-        # capability); surface stderr so the operator can fix the environment.
-        raise RuntimeError(f"nmap scan failed (exit {proc.returncode}): {proc.stderr.strip()[:2000]}")
-
-    return _parse_nmap_xml(proc.stdout)
+    finally:
+        if os.path.exists(xml_path):
+            os.remove(xml_path)
 
 
 def _parse_nmap_xml(xml_text: str) -> list[ScannedHost]:

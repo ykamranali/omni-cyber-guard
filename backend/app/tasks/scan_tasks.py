@@ -14,6 +14,7 @@ from app.models.scan_job import ScanJob, ScanStatus
 from app.services.network_scanner import (
     run_discovery_and_service_scan, ScanAuthorizationError, RISKY_PORTS,
 )
+import concurrent.futures
 from app.services.risk_scoring import recompute_asset_risk_score
 
 
@@ -29,15 +30,44 @@ def run_network_scan(scan_job_id: str) -> None:
         db.commit()
 
         try:
-            hosts = run_discovery_and_service_scan(job.target_cidr)
-        except (ScanAuthorizationError, RuntimeError) as exc:
-            job.status = ScanStatus.FAILED
-            job.error_message = str(exc)
-            db.commit()
-            return
+            from app.scanners.manager import ScannerManager
+            nmap_scanner = ScannerManager.get_scanner("nmap")
+            
+            if not nmap_scanner:
+                raise RuntimeError("Nmap scanner plugin not registered.")
+                
+            def log_progress(line: str):
+                db_session = SessionLocal()
+                try:
+                    active_job = db_session.query(ScanJob).filter(ScanJob.id == uuid.UUID(scan_job_id)).first()
+                    if active_job:
+                        if active_job.status == ScanStatus.FAILED:
+                            raise RuntimeError("Scan manually canceled by user.")
+                        active_job.raw_summary = (active_job.raw_summary or "") + line + "\n"
+                        db_session.commit()
+                finally:
+                    db_session.close()
+                
+            nmap_result = nmap_scanner.execute(job.target_cidr, progress_callback=log_progress)
+            hosts = nmap_result.raw_data
+            
+        except (RuntimeError, Exception) as exc: # catching ScanAuthorizationError via Exception for now since it's wrapped
+            from app.services.network_scanner import ScanAuthorizationError
+            if isinstance(exc, ScanAuthorizationError) or isinstance(exc, RuntimeError):
+                job.status = ScanStatus.FAILED
+                job.error_message = str(exc)
+                db.commit()
+                return
+            raise
 
         findings_generated = 0
         touched_assets: list[Asset] = []
+        nuclei_scanner = None
+        try:
+            from app.scanners.manager import ScannerManager
+            nuclei_scanner = ScannerManager.get_scanner("nuclei")
+        except Exception:
+            pass
 
         for host in hosts:
             asset = (
@@ -110,6 +140,48 @@ def run_network_scan(scan_job_id: str) -> None:
                 db.add(finding)
                 findings_generated += 1
 
+            if nuclei_scanner and nuclei_scanner.is_available():
+                def scan_target(target_url, asset):
+                    generated = 0
+                    try:
+                        n_result = nuclei_scanner.execute(target_url)
+                        for nf in n_result.findings:
+                            severity_str = nf.get("severity", "info").lower()
+                            db_severity = Severity.INFO
+                            if severity_str == "critical": db_severity = Severity.CRITICAL
+                            elif severity_str == "high": db_severity = Severity.HIGH
+                            elif severity_str == "medium": db_severity = Severity.MEDIUM
+                            elif severity_str == "low": db_severity = Severity.LOW
+
+                            nuclei_finding = Finding(
+                                organization_id=job.organization_id,
+                                asset_id=asset.id,
+                                title=nf.get("title", "Nuclei Finding"),
+                                description=nf.get("description", ""),
+                                severity=db_severity,
+                                status=FindingStatus.OPEN,
+                                remediation_guidance=nf.get("remediation_guidance", ""),
+                                source="nuclei",
+                                evidence=nf.get("evidence", "")
+                            )
+                            db.add(nuclei_finding)
+                            generated += 1
+                    except Exception:
+                        pass
+                    return generated
+
+                targets = []
+                for scanned_port in host.ports:
+                    if scanned_port.service in ("http", "https") or scanned_port.port in (80, 443, 8080, 8443):
+                        protocol = "https" if scanned_port.port in (443, 8443) else "http"
+                        targets.append(f"{protocol}://{host.ip_address}:{scanned_port.port}")
+                
+                if targets:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(scan_target, t, asset) for t in targets]
+                        for future in concurrent.futures.as_completed(futures):
+                            findings_generated += future.result()
+
         db.commit()
 
         for asset in touched_assets:
@@ -118,7 +190,7 @@ def run_network_scan(scan_job_id: str) -> None:
         job.status = ScanStatus.COMPLETED
         job.hosts_discovered = len(hosts)
         job.findings_generated = findings_generated
-        job.raw_summary = f"Discovered {len(hosts)} live host(s); generated {findings_generated} new finding(s)."
+        job.raw_summary = (job.raw_summary or "") + f"\nScan Complete: Discovered {len(hosts)} live host(s); generated {findings_generated} new finding(s)."
         db.commit()
 
     except Exception as exc:  # noqa: BLE001 - surface any unexpected failure to the job record

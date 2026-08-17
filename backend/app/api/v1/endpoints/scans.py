@@ -80,3 +80,27 @@ def get_scan(
     if not job:
         raise HTTPException(status_code=404, detail="Scan job not found")
     return job
+
+
+@router.post("/{scan_id}/cancel", response_model=ScanJobOut)
+def cancel_scan(
+    scan_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(Permission.RUN_SCANS)),
+):
+    job = (
+        db.query(ScanJob)
+        .filter(ScanJob.id == scan_id, ScanJob.organization_id == current_user.organization_id)
+        .first()
+    )
+    if not job:
+        raise HTTPException(status_code=404, detail="Scan job not found")
+
+    if job.status in (ScanStatus.QUEUED, ScanStatus.RUNNING):
+        job.status = ScanStatus.FAILED
+        job.error_message = "Scan manually canceled by user."
+        db.commit()
+        db.refresh(job)
+        log_action(db, "cancel_scan", "scan_job", current_user.organization_id, current_user.id, str(job.id))
+        
+    return job

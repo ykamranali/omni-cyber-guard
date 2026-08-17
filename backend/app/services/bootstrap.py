@@ -36,11 +36,17 @@ def ensure_bootstrap_admin() -> None:
         if db.query(User).count() > 0:
             return  # already bootstrapped, or seed data / real users already exist
 
-        org = Organization(name="Platform Administration", slug="platform-admin")
-        db.add(org)
-        db.flush()
-
-        role_objs = provision_new_organization(db, org)
+        org = db.query(Organization).filter_by(slug="platform-admin").first()
+        if not org:
+            org = Organization(name="Platform Administration", slug="platform-admin")
+            db.add(org)
+            db.flush()
+            role_objs = provision_new_organization(db, org)
+        else:
+            from app.models.role import Role
+            role_objs = {r.name: r for r in db.query(Role).filter_by(organization_id=org.id).all()}
+            if "super_administrator" not in role_objs:
+                role_objs = provision_new_organization(db, org)
 
         admin = User(
             organization_id=org.id,
