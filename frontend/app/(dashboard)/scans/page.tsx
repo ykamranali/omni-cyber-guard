@@ -63,6 +63,15 @@ export default function ScanCenterPage() {
     },
   });
 
+  const deleteScan = useMutation({
+    mutationFn: (id: string) => api.delete(`/scans/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["scans"] });
+      setExpandedId(null);
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : "Failed to delete scan"),
+  });
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     startScan.mutate();
@@ -180,15 +189,30 @@ export default function ScanCenterPage() {
                                 <Radar size={12} className={s.status === "running" ? "animate-pulse text-primary" : ""} />
                                 <span>Live Scan Terminal Feed</span>
                               </div>
-                              {s.status === "running" && (
-                                <button
-                                  onClick={() => cancelScan.mutate(s.id)}
-                                  disabled={cancelScan.isPending}
-                                  className="rounded border border-critical/50 bg-critical/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-critical hover:bg-critical/20"
-                                >
-                                  Stop Scan
-                                </button>
-                              )}
+                              <div className="flex items-center gap-2">
+                                {s.status === "running" && (
+                                  <button
+                                    onClick={() => cancelScan.mutate(s.id)}
+                                    disabled={cancelScan.isPending}
+                                    className="rounded border border-critical/50 bg-critical/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-critical hover:bg-critical/20"
+                                  >
+                                    Stop Scan
+                                  </button>
+                                )}
+                                {(s.status === "completed" || s.status === "failed") && (
+                                  <button
+                                    onClick={() => {
+                                      if (confirm("Are you sure you want to delete this scan? This will also permanently delete all associated assets and findings.")) {
+                                        deleteScan.mutate(s.id);
+                                      }
+                                    }}
+                                    disabled={deleteScan.isPending}
+                                    className="rounded border border-critical/50 bg-critical/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-critical hover:bg-critical/20"
+                                  >
+                                    {deleteScan.isPending ? "Deleting..." : "Delete Scan"}
+                                  </button>
+                                )}
+                              </div>
                             </div>
                             <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap text-green-400">
                               {s.raw_summary || (s.status === "queued" ? "Queued for scanning..." : "Initializing scan engine...")}

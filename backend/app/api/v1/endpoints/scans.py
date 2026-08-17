@@ -104,3 +104,25 @@ def cancel_scan(
         log_action(db, "cancel_scan", "scan_job", current_user.organization_id, current_user.id, str(job.id))
         
     return job
+
+@router.delete("/{scan_id}", status_code=204)
+def delete_scan(
+    scan_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(Permission.RUN_SCANS)),
+):
+    job = (
+        db.query(ScanJob)
+        .filter(ScanJob.id == scan_id, ScanJob.organization_id == current_user.organization_id)
+        .first()
+    )
+    if not job:
+        raise HTTPException(status_code=404, detail="Scan job not found")
+
+    if job.status in (ScanStatus.QUEUED, ScanStatus.RUNNING):
+        raise HTTPException(status_code=400, detail="Cannot delete a scan that is currently running or queued. Cancel it first.")
+
+    db.delete(job)
+    db.commit()
+    log_action(db, "delete_scan", "scan_job", current_user.organization_id, current_user.id, str(job.id))
+
