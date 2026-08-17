@@ -200,27 +200,38 @@ def _parse_nmap_xml(xml_text: str) -> list[ScannedHost]:
         os_match = None
         os_el = host_el.find("os")
         if os_el is not None:
-            osmatch_el = os_el.find("osmatch")
-            if osmatch_el is not None:
+            import re
+            best_raw_os = None
+            # Iterate through all osmatch guesses and prefer major OSes over obscure hardware
+            for osmatch_el in os_el.findall("osmatch"):
                 raw_os = osmatch_el.get("name")
-                if raw_os:
-                    # Clean up common Nmap OS strings for cleaner UI presentation
-                    import re
-                    if re.search(r"Windows 10", raw_os, re.IGNORECASE): os_match = "Windows 10"
-                    elif re.search(r"Windows 11", raw_os, re.IGNORECASE): os_match = "Windows 11"
-                    elif re.search(r"Windows Server 2019", raw_os, re.IGNORECASE): os_match = "Windows Server 2019"
-                    elif re.search(r"Windows Server 2022", raw_os, re.IGNORECASE): os_match = "Windows Server 2022"
-                    elif re.search(r"Windows 8", raw_os, re.IGNORECASE): os_match = "Windows 8"
-                    elif re.search(r"Windows 7", raw_os, re.IGNORECASE): os_match = "Windows 7"
-                    elif re.search(r"Windows XP", raw_os, re.IGNORECASE): os_match = "Windows XP"
-                    elif re.search(r"Linux 2\.6", raw_os, re.IGNORECASE): os_match = "Linux 2.6.x"
-                    elif re.search(r"Linux 3\.", raw_os, re.IGNORECASE): os_match = "Linux 3.x"
-                    elif re.search(r"Linux 4\.", raw_os, re.IGNORECASE): os_match = "Linux 4.x"
-                    elif re.search(r"Linux 5\.", raw_os, re.IGNORECASE): os_match = "Linux 5.x"
-                    elif re.search(r"macOS|Mac OS X", raw_os, re.IGNORECASE): os_match = "macOS"
-                    elif re.search(r"FreeBSD", raw_os, re.IGNORECASE): os_match = "FreeBSD"
-                    elif re.search(r"Cisco IOS", raw_os, re.IGNORECASE): os_match = "Cisco IOS"
-                    else: os_match = raw_os.split("|")[0].strip()[:50]  # truncate long strings
+                if not raw_os:
+                    continue
+                if not best_raw_os:
+                    best_raw_os = raw_os # Fallback to highest accuracy guess
+                    
+                # Clean up common Nmap OS strings for cleaner UI presentation
+                if re.search(r"Windows 11", raw_os, re.IGNORECASE): os_match = "Windows 11"; break
+                elif re.search(r"Windows 10", raw_os, re.IGNORECASE): os_match = "Windows 10"; break
+                elif re.search(r"Windows Server 2022", raw_os, re.IGNORECASE): os_match = "Windows Server 2022"; break
+                elif re.search(r"Windows Server 2019", raw_os, re.IGNORECASE): os_match = "Windows Server 2019"; break
+                elif re.search(r"Windows Server 2016", raw_os, re.IGNORECASE): os_match = "Windows Server 2016"; break
+                elif re.search(r"Windows Server", raw_os, re.IGNORECASE): os_match = "Windows Server"; break
+                elif re.search(r"Windows 8", raw_os, re.IGNORECASE): os_match = "Windows 8"; break
+                elif re.search(r"Windows 7", raw_os, re.IGNORECASE): os_match = "Windows 7"; break
+                elif re.search(r"Windows XP", raw_os, re.IGNORECASE): os_match = "Windows XP"; break
+                elif re.search(r"Windows", raw_os, re.IGNORECASE): os_match = "Windows (Unknown Version)"; break
+                elif re.search(r"Linux 5\.", raw_os, re.IGNORECASE): os_match = "Linux 5.x"; break
+                elif re.search(r"Linux 4\.", raw_os, re.IGNORECASE): os_match = "Linux 4.x"; break
+                elif re.search(r"Linux 3\.", raw_os, re.IGNORECASE): os_match = "Linux 3.x"; break
+                elif re.search(r"Linux 2\.6", raw_os, re.IGNORECASE): os_match = "Linux 2.6.x"; break
+                elif re.search(r"Linux", raw_os, re.IGNORECASE): os_match = "Linux (Unknown Kernel)"; break
+                elif re.search(r"macOS|Mac OS X|Apple", raw_os, re.IGNORECASE): os_match = "macOS"; break
+                elif re.search(r"FreeBSD", raw_os, re.IGNORECASE): os_match = "FreeBSD"; break
+                elif re.search(r"Cisco IOS", raw_os, re.IGNORECASE): os_match = "Cisco IOS"; break
+            
+            if not os_match and best_raw_os:
+                os_match = best_raw_os.split("|")[0].strip()[:50]  # truncate long strings
 
         host_scripts: list[ScannedScript] = []
         hostscript_el = host_el.find("hostscript")
