@@ -4,13 +4,22 @@ import time
 from datetime import datetime, timezone
 
 try:
-    from scapy.all import sniff, IP, TCP, UDP, Raw
+    from scapy.all import sniff, IP, TCP, UDP, Raw, send
     SCAPY_AVAILABLE = True
 except ImportError:
     SCAPY_AVAILABLE = False
 
 MAX_EVENTS = 100
 threat_events = collections.deque(maxlen=MAX_EVENTS)
+
+# Thread-safe set of blocked IPs for Active Defense
+blocked_ips = set()
+
+def add_blocked_ip(ip: str):
+    blocked_ips.add(ip)
+
+def remove_blocked_ip(ip: str):
+    blocked_ips.discard(ip)
 
 # For port scan detection
 # Track SYNs: IP -> set of ports
@@ -43,6 +52,14 @@ def process_packet(packet):
         ip_src = packet[IP].src
         ip_dst = packet[IP].dst
         
+        # Active Defense: TCP RST Injection
+        if ip_src in blocked_ips and packet.haslayer(TCP):
+            rst_pkt = IP(src=ip_dst, dst=ip_src) / \
+                      TCP(sport=packet[TCP].dport, dport=packet[TCP].sport, 
+                          seq=packet[TCP].ack, ack=packet[TCP].seq + 1, flags="RA")
+            send(rst_pkt, verbose=False)
+            return
+
         # 1. Port Scan Detection (TCP SYN)
         if packet.haslayer(TCP):
             dport = packet[TCP].dport
