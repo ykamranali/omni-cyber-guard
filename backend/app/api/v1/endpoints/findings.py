@@ -76,3 +76,50 @@ def update_finding(
 
     log_action(db, "update", "finding", current_user.organization_id, current_user.id, str(finding.id))
     return finding
+
+@router.delete("/bulk", status_code=204)
+def delete_findings_bulk(
+    finding_ids: list[uuid.UUID],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(Permission.MANAGE_FINDINGS)),
+):
+    findings = (
+        db.query(Finding)
+        .filter(Finding.id.in_(finding_ids), Finding.organization_id == current_user.organization_id)
+        .all()
+    )
+    assets_to_recompute = set()
+    for finding in findings:
+        assets_to_recompute.add(finding.asset_id)
+        db.delete(finding)
+        log_action(db, "delete", "finding", current_user.organization_id, current_user.id, str(finding.id))
+    db.commit()
+
+    for asset_id in assets_to_recompute:
+        asset = db.query(Asset).filter(Asset.id == asset_id).first()
+        if asset:
+            recompute_asset_risk_score(db, asset)
+
+@router.delete("/{finding_id}", status_code=204)
+def delete_finding(
+    finding_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(Permission.MANAGE_FINDINGS)),
+):
+    finding = (
+        db.query(Finding)
+        .filter(Finding.id == finding_id, Finding.organization_id == current_user.organization_id)
+        .first()
+    )
+    if not finding:
+        raise HTTPException(status_code=404, detail="Finding not found")
+    
+    asset_id = finding.asset_id
+    db.delete(finding)
+    db.commit()
+    
+    asset = db.query(Asset).filter(Asset.id == asset_id).first()
+    if asset:
+        recompute_asset_risk_score(db, asset)
+    
+    log_action(db, "delete", "finding", current_user.organization_id, current_user.id, str(finding_id))

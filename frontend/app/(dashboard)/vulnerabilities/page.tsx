@@ -54,6 +54,33 @@ export default function VulnerabilitiesPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["findings"] }),
   });
 
+  const [selectedFindingIds, setSelectedFindingIds] = useState<Set<string>>(new Set());
+
+  const deleteBulkFindings = useMutation({
+    mutationFn: (ids: string[]) => api.delete("/findings/bulk", ids),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["findings"] });
+      setSelectedFindingIds(new Set());
+      setExpandedId(null);
+    },
+  });
+
+  const toggleFindingSelection = (id: string) => {
+    const newSet = new Set(selectedFindingIds);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setSelectedFindingIds(newSet);
+  };
+
+  const toggleAllFindings = () => {
+    if (!findings) return;
+    if (selectedFindingIds.size === findings.length) {
+      setSelectedFindingIds(new Set());
+    } else {
+      setSelectedFindingIds(new Set(findings.map(f => f.id)));
+    }
+  };
+
   const filtered = useMemo(() => {
     if (!findings) return [];
     return findings
@@ -92,6 +119,33 @@ export default function VulnerabilitiesPage() {
         </div>
 
         <Card className="overflow-hidden p-0">
+          <div className="flex items-center justify-between border-b border-border px-5 py-3 bg-surface-hover/50">
+            <div className="flex items-center gap-3">
+              {findings && findings.length > 0 && (
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
+                  checked={selectedFindingIds.size === findings.length}
+                  onChange={toggleAllFindings}
+                />
+              )}
+              <span className="text-xs font-medium text-muted uppercase tracking-wide">Vulnerabilities</span>
+            </div>
+            {selectedFindingIds.size > 0 && (
+              <button
+                className="rounded border border-critical/50 bg-critical/10 px-2 py-1 text-xs uppercase tracking-wider text-critical hover:bg-critical/20"
+                onClick={() => {
+                  if (confirm(`Are you sure you want to delete ${selectedFindingIds.size} vulnerability(ies)?`)) {
+                    deleteBulkFindings.mutate(Array.from(selectedFindingIds));
+                  }
+                }}
+                disabled={deleteBulkFindings.isPending}
+              >
+                {deleteBulkFindings.isPending ? "Deleting..." : `Delete Selected (${selectedFindingIds.size})`}
+              </button>
+            )}
+          </div>
+
           {isLoading && <p className="p-6 text-sm text-muted">Loading findings…</p>}
           {isError && <p className="p-6 text-sm text-critical">Unable to load findings from the API.</p>}
           {findings && findings.length === 0 && (
@@ -104,26 +158,34 @@ export default function VulnerabilitiesPage() {
             <div className="divide-y divide-border/60">
               {filtered.map((f) => (
                 <div key={f.id} className="p-4">
-                  <div
-                    className="flex cursor-pointer items-start justify-between gap-4"
-                    onClick={() => setExpandedId(expandedId === f.id ? null : f.id)}
-                  >
-                    <div className="flex min-w-0 items-start gap-3">
-                      <ShieldAlert size={16} className="mt-0.5 shrink-0 text-high" />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-ink">{f.title}</p>
-                        <p className="mt-0.5 text-xs text-muted">
-                          {f.cve_id ? `${f.cve_id} · ` : ""}
-                          {f.cvss_score != null ? `CVSS ${f.cvss_score} · ` : ""}
-                          Source: {f.source === "network_scan" ? "Network scan" : "Manual entry"}
-                        </p>
+                  <div className="flex items-start gap-4">
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
+                      checked={selectedFindingIds.has(f.id)}
+                      onChange={() => toggleFindingSelection(f.id)}
+                    />
+                    <div className="flex-1">
+                      <div
+                        className="flex cursor-pointer items-start justify-between gap-4"
+                        onClick={() => setExpandedId(expandedId === f.id ? null : f.id)}
+                      >
+                        <div className="flex min-w-0 items-start gap-3">
+                          <ShieldAlert size={16} className="mt-0.5 shrink-0 text-high" />
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-ink">{f.title}</p>
+                            <p className="mt-0.5 text-xs text-muted">
+                              {f.cve_id ? `${f.cve_id} · ` : ""}
+                              {f.cvss_score != null ? `CVSS ${f.cvss_score} · ` : ""}
+                              Source: {f.source === "network_scan" ? "Network scan" : "Manual entry"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <Badge label={f.severity} />
+                          <Badge label={f.status} />
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <Badge label={f.severity} />
-                      <Badge label={f.status} />
-                    </div>
-                  </div>
 
                   {expandedId === f.id && (
                     <div className="ml-7 mt-3 space-y-3 rounded-lg bg-surface-hover/40 p-3 text-sm">
@@ -158,6 +220,8 @@ export default function VulnerabilitiesPage() {
                       </div>
                     </div>
                   )}
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>

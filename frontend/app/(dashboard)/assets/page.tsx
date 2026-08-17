@@ -56,6 +56,8 @@ export default function AssetsPage() {
     },
   });
 
+  const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(new Set());
+
   const createAsset = useMutation({
     mutationFn: (values: AssetFormValues) =>
       api.post<AssetOut>("/assets", {
@@ -77,6 +79,30 @@ export default function AssetsPage() {
     mutationFn: (id: string) => api.delete(`/assets/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["assets"] }),
   });
+
+  const deleteBulkAssets = useMutation({
+    mutationFn: (ids: string[]) => api.delete("/assets/bulk", ids),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["assets"] });
+      setSelectedAssetIds(new Set());
+    },
+  });
+
+  const toggleAssetSelection = (id: string) => {
+    const newSet = new Set(selectedAssetIds);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setSelectedAssetIds(newSet);
+  };
+
+  const toggleAllAssets = () => {
+    if (!assets) return;
+    if (selectedAssetIds.size === assets.length) {
+      setSelectedAssetIds(new Set());
+    } else {
+      setSelectedAssetIds(new Set(assets.map(a => a.id)));
+    }
+  };
 
   async function handleExport() {
     const token = useAuthStore.getState().accessToken;
@@ -143,6 +169,19 @@ export default function AssetsPage() {
             </select>
           </div>
           <div className="flex gap-2">
+            {selectedAssetIds.size > 0 && (
+              <Button
+                variant="danger"
+                onClick={() => {
+                  if (confirm(`Are you sure you want to delete ${selectedAssetIds.size} asset(s)?`)) {
+                    deleteBulkAssets.mutate(Array.from(selectedAssetIds));
+                  }
+                }}
+                disabled={deleteBulkAssets.isPending}
+              >
+                <Trash2 size={15} /> Delete Selected
+              </Button>
+            )}
             <input
               ref={fileInputRef}
               type="file"
@@ -176,6 +215,14 @@ export default function AssetsPage() {
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-border bg-surface-hover/50 text-xs uppercase tracking-wide text-muted">
                   <tr>
+                    <th className="px-4 py-3 font-medium w-10">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
+                        checked={assets && assets.length > 0 && selectedAssetIds.size === assets.length}
+                        onChange={toggleAllAssets}
+                      />
+                    </th>
                     <th className="px-4 py-3 font-medium">Hostname</th>
                     <th className="px-4 py-3 font-medium">IP Address</th>
                     <th className="px-4 py-3 font-medium">Type</th>
@@ -189,6 +236,14 @@ export default function AssetsPage() {
                 <tbody>
                   {assets.map((asset) => (
                     <tr key={asset.id} className="border-b border-border/60 hover:bg-surface-hover/40">
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
+                          checked={selectedAssetIds.has(asset.id)}
+                          onChange={() => toggleAssetSelection(asset.id)}
+                        />
+                      </td>
                       <td className="px-4 py-3 font-medium text-ink">{asset.hostname}</td>
                       <td className="px-4 py-3 text-ink/75">{asset.ip_address || "—"}</td>
                       <td className="px-4 py-3 capitalize text-ink/75">{asset.asset_type.replace(/_/g, " ")}</td>

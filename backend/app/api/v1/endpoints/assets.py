@@ -98,6 +98,22 @@ def update_asset(
     return asset
 
 
+@router.delete("/bulk", status_code=204)
+def delete_assets_bulk(
+    asset_ids: list[uuid.UUID],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(Permission.MANAGE_ASSETS)),
+):
+    assets = (
+        db.query(Asset)
+        .filter(Asset.id.in_(asset_ids), Asset.organization_id == current_user.organization_id)
+        .all()
+    )
+    for asset in assets:
+        db.delete(asset)
+        log_action(db, "delete", "asset", current_user.organization_id, current_user.id, str(asset.id))
+    db.commit()
+
 @router.delete("/{asset_id}", status_code=204)
 def delete_asset(
     asset_id: uuid.UUID,

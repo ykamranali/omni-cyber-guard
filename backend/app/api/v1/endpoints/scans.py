@@ -105,8 +105,26 @@ def cancel_scan(
         
     return job
 
+@router.delete("/bulk", status_code=204)
+def delete_scans_bulk(
+    scan_ids: list[uuid.UUID],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(Permission.RUN_SCANS)),
+):
+    jobs = (
+        db.query(ScanJob)
+        .filter(ScanJob.id.in_(scan_ids), ScanJob.organization_id == current_user.organization_id)
+        .all()
+    )
+    for job in jobs:
+        if job.status not in (ScanStatus.QUEUED, ScanStatus.RUNNING):
+            db.delete(job)
+            log_action(db, "delete_scan", "scan_job", current_user.organization_id, current_user.id, str(job.id))
+    db.commit()
+
 @router.delete("/{scan_id}", status_code=204)
 def delete_scan(
+
     scan_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(Permission.RUN_SCANS)),

@@ -45,6 +45,8 @@ export default function ScanCenterPage() {
       (query.state.data || []).some((s) => s.status === "queued" || s.status === "running") ? 3000 : false,
   });
 
+  const [selectedScanIds, setSelectedScanIds] = useState<Set<string>>(new Set());
+  
   const startScan = useMutation({
     mutationFn: () => api.post<ScanJobOut>("/scans", { target_cidr: cidr }),
     onSuccess: (job) => {
@@ -71,6 +73,32 @@ export default function ScanCenterPage() {
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : "Failed to delete scan"),
   });
+
+  const deleteBulkScans = useMutation({
+    mutationFn: (ids: string[]) => api.delete("/scans/bulk", ids),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["scans"] });
+      setSelectedScanIds(new Set());
+      setExpandedId(null);
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : "Failed to delete scans"),
+  });
+
+  const toggleScanSelection = (id: string) => {
+    const newSet = new Set(selectedScanIds);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setSelectedScanIds(newSet);
+  };
+
+  const toggleAllScans = () => {
+    if (!scans) return;
+    if (selectedScanIds.size === scans.length) {
+      setSelectedScanIds(new Set());
+    } else {
+      setSelectedScanIds(new Set(scans.map(s => s.id)));
+    }
+  };
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -127,8 +155,32 @@ export default function ScanCenterPage() {
         </Card>
 
         <Card className="overflow-hidden p-0">
-          <div className="border-b border-border px-5 py-4">
-            <h3 className="text-sm font-medium text-ink">Scan History</h3>
+          <div className="flex items-center justify-between border-b border-border px-5 py-4">
+            <div className="flex items-center gap-3">
+              {scans && scans.length > 0 && (
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
+                  checked={selectedScanIds.size === scans.length}
+                  onChange={toggleAllScans}
+                />
+              )}
+              <h3 className="text-sm font-medium text-ink">Scan History</h3>
+            </div>
+            {selectedScanIds.size > 0 && (
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => {
+                  if (confirm(`Are you sure you want to delete ${selectedScanIds.size} scan(s)? This will also permanently delete all associated assets and findings.`)) {
+                    deleteBulkScans.mutate(Array.from(selectedScanIds));
+                  }
+                }}
+                disabled={deleteBulkScans.isPending}
+              >
+                {deleteBulkScans.isPending ? "Deleting..." : `Delete Selected (${selectedScanIds.size})`}
+              </Button>
+            )}
           </div>
 
           {isLoading && <p className="p-6 text-sm text-muted">Loading scans…</p>}
@@ -146,34 +198,42 @@ export default function ScanCenterPage() {
                 const meta = STATUS_META[s.status];
                 return (
                   <div key={s.id} className="p-4">
-                    <button
-                      className="flex w-full items-center justify-between gap-4 text-left"
-                      onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className={meta.color}>{meta.icon}</span>
-                        <div>
-                          <p className="text-sm font-medium text-ink">{s.target_cidr}</p>
-                          <p className="text-xs text-muted">
-                            {new Date(s.created_at).toLocaleString()} · {s.scan_type.replace(/_/g, " ")}
-                          </p>
+                    <div className="flex w-full items-center gap-4">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
+                        checked={selectedScanIds.has(s.id)}
+                        onChange={() => toggleScanSelection(s.id)}
+                      />
+                      <button
+                        className="flex flex-1 items-center justify-between gap-4 text-left"
+                        onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className={meta.color}>{meta.icon}</span>
+                          <div>
+                            <p className="text-sm font-medium text-ink">{s.target_cidr}</p>
+                            <p className="text-xs text-muted">
+                              {new Date(s.created_at).toLocaleString()} · {s.scan_type.replace(/_/g, " ")}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        {s.status === "completed" && (
-                          <>
-                            <span className="flex items-center gap-1 text-xs text-ink/70">
-                              <Server size={13} /> {s.hosts_discovered} host(s)
-                            </span>
-                            <span className="flex items-center gap-1 text-xs text-ink/70">
-                              <ShieldAlert size={13} /> {s.findings_generated} finding(s)
-                            </span>
-                          </>
-                        )}
-                        <span className={`text-xs font-medium ${meta.color}`}>{meta.label}</span>
-                        {expandedId === s.id ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
-                      </div>
-                    </button>
+                        <div className="flex items-center gap-4">
+                          {s.status === "completed" && (
+                            <>
+                              <span className="flex items-center gap-1 text-xs text-ink/70">
+                                <Server size={13} /> {s.hosts_discovered} host(s)
+                              </span>
+                              <span className="flex items-center gap-1 text-xs text-ink/70">
+                                <ShieldAlert size={13} /> {s.findings_generated} finding(s)
+                              </span>
+                            </>
+                          )}
+                          <span className={`text-xs font-medium ${meta.color}`}>{meta.label}</span>
+                          {expandedId === s.id ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
+                        </div>
+                      </button>
+                    </div>
 
                     {expandedId === s.id && (
                       <div className="ml-7 mt-3 rounded-lg bg-ink p-4 shadow-inner">
