@@ -61,7 +61,7 @@ export default function IntelligencePage() {
                       
                       {insight.type === "critical" && (
                          <div className="mt-3 flex gap-2">
-                           <Button size="sm" variant="destructive" className="h-7 text-xs">Isolate Asset</Button>
+                           <Button size="sm" variant="danger" className="h-7 text-xs">Isolate Asset</Button>
                            <Button size="sm" variant="outline" className="h-7 text-xs">Create Incident</Button>
                          </div>
                       )}
