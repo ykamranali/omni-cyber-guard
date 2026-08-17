@@ -82,13 +82,18 @@ def run_network_scan(scan_job_id: str) -> None:
                     ip_address=host.ip_address,
                     asset_type=AssetType.OTHER,
                     status=AssetStatus.ACTIVE,
+                    operating_system=host.os_match,
                     tags=["discovered-by-scan"],
+                    scan_job_id=job.id,
                 )
                 db.add(asset)
                 db.flush()
             else:
+                asset.scan_job_id = job.id
                 if host.hostname:
                     asset.hostname = host.hostname
+                if host.os_match:
+                    asset.operating_system = host.os_match
 
             if host.mac_address:
                 asset.mac_address = host.mac_address
@@ -120,6 +125,7 @@ def run_network_scan(scan_job_id: str) -> None:
                     .first()
                 )
                 if existing:
+                    existing.scan_job_id = job.id
                     continue
 
                 severity = Severity.HIGH if scanned_port.port in (3389, 23, 445, 5900) else Severity.MEDIUM
@@ -136,9 +142,53 @@ def run_network_scan(scan_job_id: str) -> None:
                     status=FindingStatus.OPEN,
                     remediation_guidance=guidance,
                     source="network_scan",
+                    scan_job_id=job.id,
                 )
                 db.add(finding)
                 findings_generated += 1
+
+                for script in scanned_port.scripts:
+                    existing_script = db.query(Finding).filter(Finding.asset_id == asset.id, Finding.source == "nmap_script", Finding.title == f"Nmap Script ({scanned_port.port}): {script.id}").first()
+                    if existing_script:
+                        existing_script.scan_job_id = job.id
+                    if not existing_script:
+                        script_severity = Severity.HIGH if "VULNERABLE" in script.output or "vuln" in script.id else Severity.INFO
+                        if script_severity == Severity.HIGH and "critical" in script.output.lower():
+                            script_severity = Severity.CRITICAL
+                            
+                        script_finding = Finding(
+                            organization_id=job.organization_id,
+                            asset_id=asset.id,
+                            title=f"Nmap Script ({scanned_port.port}): {script.id}",
+                            description=f"Nmap script '{script.id}' executed on port {scanned_port.port}/{scanned_port.protocol}. This often indicates an outdated application version or misconfiguration.\n\nEvidence:\n{script.output[:2000]}",
+                            severity=script_severity,
+                            status=FindingStatus.OPEN,
+                            remediation_guidance="Review script evidence and apply necessary software updates or patches.",
+                            source="nmap_script",
+                            scan_job_id=job.id,
+                        )
+                        db.add(script_finding)
+                        findings_generated += 1
+                        
+            for script in host.scripts:
+                existing_script = db.query(Finding).filter(Finding.asset_id == asset.id, Finding.source == "nmap_script", Finding.title == f"Nmap Script (Host): {script.id}").first()
+                if existing_script:
+                    existing_script.scan_job_id = job.id
+                if not existing_script:
+                    script_severity = Severity.HIGH if "VULNERABLE" in script.output or "vuln" in script.id else Severity.INFO
+                    script_finding = Finding(
+                        organization_id=job.organization_id,
+                        asset_id=asset.id,
+                        title=f"Nmap Script (Host): {script.id}",
+                        description=f"Nmap script '{script.id}' executed on host {host.ip_address}.\n\nEvidence:\n{script.output[:2000]}",
+                        severity=script_severity,
+                        status=FindingStatus.OPEN,
+                        remediation_guidance="Review script evidence and apply necessary updates.",
+                        source="nmap_script",
+                        scan_job_id=job.id,
+                    )
+                    db.add(script_finding)
+                    findings_generated += 1
 
             if nuclei_scanner and nuclei_scanner.is_available():
                 def scan_target(target_url, asset):
@@ -157,12 +207,11 @@ def run_network_scan(scan_job_id: str) -> None:
                                 organization_id=job.organization_id,
                                 asset_id=asset.id,
                                 title=nf.get("title", "Nuclei Finding"),
-                                description=nf.get("description", ""),
+                                description=f'{nf.get("description", "")}\n\nEvidence:\n{nf.get("evidence", "")}',
                                 severity=db_severity,
                                 status=FindingStatus.OPEN,
                                 remediation_guidance=nf.get("remediation_guidance", ""),
-                                source="nuclei",
-                                evidence=nf.get("evidence", "")
+                                source="nuclei"
                             )
                             db.add(nuclei_finding)
                             generated += 1

@@ -1,3 +1,4 @@
+from typing import Callable
 from app.scanners.base import Scanner, ScannerResult
 from app.services.network_scanner import (
     run_discovery_and_service_scan,
@@ -25,7 +26,7 @@ class NmapScanner(Scanner):
         except ScanAuthorizationError:
             return False
 
-    def execute(self, target: str, **kwargs) -> ScannerResult:
+    def execute(self, target: str, progress_callback: Callable = None, **kwargs) -> ScannerResult:
         if not self.is_available():
             raise RuntimeError("nmap is not available.")
         

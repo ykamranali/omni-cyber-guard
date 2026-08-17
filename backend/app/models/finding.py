@@ -35,6 +35,9 @@ class Finding(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     asset_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    scan_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("scan_jobs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
@@ -48,3 +51,4 @@ class Finding(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     source: Mapped[str] = mapped_column(String(100), default="manual")
 
     asset: Mapped["Asset"] = relationship(back_populates="findings")
+    scan_job: Mapped["ScanJob"] = relationship("ScanJob")

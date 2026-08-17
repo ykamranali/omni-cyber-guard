@@ -22,6 +22,7 @@ def list_assets(
     asset_type: AssetType | None = Query(default=None),
     status_filter: AssetStatus | None = Query(default=None, alias="status"),
     site: str | None = Query(default=None),
+    scan_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(Permission.VIEW_ASSETS)),
 ):
@@ -37,6 +38,11 @@ def list_assets(
         query = query.filter(Asset.status == status_filter)
     if site:
         query = query.filter(Asset.site == site)
+    if scan_id:
+        try:
+            query = query.filter(Asset.scan_job_id == uuid.UUID(scan_id))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid scan_id format")
     return query.order_by(Asset.hostname).all()
 
 
@@ -112,10 +118,17 @@ def delete_asset(
 
 @router.get("/export/csv")
 def export_assets_csv(
+    scan_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(Permission.VIEW_ASSETS)),
 ):
-    assets = db.query(Asset).filter(Asset.organization_id == current_user.organization_id).all()
+    query = db.query(Asset).filter(Asset.organization_id == current_user.organization_id)
+    if scan_id:
+        try:
+            query = query.filter(Asset.scan_job_id == uuid.UUID(scan_id))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid scan_id format")
+    assets = query.all()
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(["hostname", "ip_address", "mac_address", "asset_type", "status", "operating_system", "vendor", "site", "department"])

@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
+from typing import Callable
 
 
 class ScanAuthorizationError(Exception):
@@ -45,12 +46,19 @@ MAX_SCAN_HOSTS = 1024  # caps target CIDR size (roughly a /22) to keep scans fas
 
 
 @dataclass
+class ScannedScript:
+    id: str
+    output: str
+
+
+@dataclass
 class ScannedPort:
     port: int
     protocol: str
     service: str
     product: str
     version: str
+    scripts: list[ScannedScript] = field(default_factory=list)
 
 
 @dataclass
@@ -59,7 +67,9 @@ class ScannedHost:
     hostname: str | None
     mac_address: str | None
     vendor: str | None
+    os_match: str | None = None
     ports: list[ScannedPort] = field(default_factory=list)
+    scripts: list[ScannedScript] = field(default_factory=list)
 
 
 def validate_authorized_target(target_cidr: str) -> ipaddress.IPv4Network:
@@ -97,7 +107,7 @@ def nmap_available() -> bool:
 def run_discovery_and_service_scan(
     target_cidr: str, 
     timeout_seconds: int = 600, 
-    progress_callback: callable = None
+    progress_callback: Callable = None
 ) -> list[ScannedHost]:
     """
     Runs `nmap -sV -F` against an authorized private CIDR range and streams the
@@ -120,7 +130,8 @@ def run_discovery_and_service_scan(
     os.close(xml_fd)
     
     # -v enables verbose mode so Nmap prints "Discovered open port" and "Discovered host" live
-    cmd = ["nmap", "-sV", "-F", "-T4", "--max-retries", "1", "--host-timeout", "5m", "-v", "-oX", xml_path, str(network)]
+    # -O enables OS detection, --script vuln,default enables NSE scripting
+    cmd = ["nmap", "-sV", "-O", "--script", "vuln,default", "-F", "-T4", "--max-retries", "1", "--host-timeout", "5m", "-v", "-oX", xml_path, str(network)]
     
     try:
         proc = subprocess.Popen(
@@ -186,6 +197,37 @@ def _parse_nmap_xml(xml_text: str) -> list[ScannedHost]:
             if hn_el is not None:
                 hostname = hn_el.get("name")
 
+        os_match = None
+        os_el = host_el.find("os")
+        if os_el is not None:
+            osmatch_el = os_el.find("osmatch")
+            if osmatch_el is not None:
+                raw_os = osmatch_el.get("name")
+                if raw_os:
+                    # Clean up common Nmap OS strings for cleaner UI presentation
+                    import re
+                    if re.search(r"Windows 10", raw_os, re.IGNORECASE): os_match = "Windows 10"
+                    elif re.search(r"Windows 11", raw_os, re.IGNORECASE): os_match = "Windows 11"
+                    elif re.search(r"Windows Server 2019", raw_os, re.IGNORECASE): os_match = "Windows Server 2019"
+                    elif re.search(r"Windows Server 2022", raw_os, re.IGNORECASE): os_match = "Windows Server 2022"
+                    elif re.search(r"Windows 8", raw_os, re.IGNORECASE): os_match = "Windows 8"
+                    elif re.search(r"Windows 7", raw_os, re.IGNORECASE): os_match = "Windows 7"
+                    elif re.search(r"Windows XP", raw_os, re.IGNORECASE): os_match = "Windows XP"
+                    elif re.search(r"Linux 2\.6", raw_os, re.IGNORECASE): os_match = "Linux 2.6.x"
+                    elif re.search(r"Linux 3\.", raw_os, re.IGNORECASE): os_match = "Linux 3.x"
+                    elif re.search(r"Linux 4\.", raw_os, re.IGNORECASE): os_match = "Linux 4.x"
+                    elif re.search(r"Linux 5\.", raw_os, re.IGNORECASE): os_match = "Linux 5.x"
+                    elif re.search(r"macOS|Mac OS X", raw_os, re.IGNORECASE): os_match = "macOS"
+                    elif re.search(r"FreeBSD", raw_os, re.IGNORECASE): os_match = "FreeBSD"
+                    elif re.search(r"Cisco IOS", raw_os, re.IGNORECASE): os_match = "Cisco IOS"
+                    else: os_match = raw_os.split("|")[0].strip()[:50]  # truncate long strings
+
+        host_scripts: list[ScannedScript] = []
+        hostscript_el = host_el.find("hostscript")
+        if hostscript_el is not None:
+            for script_el in hostscript_el.findall("script"):
+                host_scripts.append(ScannedScript(id=script_el.get("id") or "unknown", output=script_el.get("output") or ""))
+
         ports: list[ScannedPort] = []
         ports_el = host_el.find("ports")
         if ports_el is not None:
@@ -194,16 +236,23 @@ def _parse_nmap_xml(xml_text: str) -> list[ScannedHost]:
                 if state_el is None or state_el.get("state") != "open":
                     continue
                 service_el = port_el.find("service")
+                
+                port_scripts: list[ScannedScript] = []
+                for script_el in port_el.findall("script"):
+                    port_scripts.append(ScannedScript(id=script_el.get("id") or "unknown", output=script_el.get("output") or ""))
+                    
                 ports.append(ScannedPort(
                     port=int(port_el.get("portid")),
                     protocol=port_el.get("protocol", "tcp"),
                     service=(service_el.get("name") if service_el is not None else "") or "unknown",
                     product=(service_el.get("product") if service_el is not None else "") or "",
                     version=(service_el.get("version") if service_el is not None else "") or "",
+                    scripts=port_scripts
                 ))
 
         hosts.append(ScannedHost(
-            ip_address=ip_address, hostname=hostname, mac_address=mac_address, vendor=vendor, ports=ports,
+            ip_address=ip_address, hostname=hostname, mac_address=mac_address, vendor=vendor, 
+            os_match=os_match, ports=ports, scripts=host_scripts
         ))
 
     return hosts

@@ -22,6 +22,7 @@ class AssetOut(BaseModel):
     longitude: float | None
     tags: list
     risk_score: float
+    scan_job_id: uuid.UUID | None
 
 
 class AssetCreate(BaseModel):
@@ -39,6 +40,7 @@ class AssetCreate(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     tags: list[str] = []
+    scan_job_id: uuid.UUID | None = None
 
 
 class AssetUpdate(BaseModel):

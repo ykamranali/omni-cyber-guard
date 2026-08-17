@@ -16,6 +16,7 @@ class FindingOut(BaseModel):
     status: FindingStatus
     remediation_guidance: str
     source: str
+    scan_job_id: uuid.UUID | None
 
 
 class FindingCreate(BaseModel):
@@ -27,6 +28,7 @@ class FindingCreate(BaseModel):
     severity: Severity = Severity.MEDIUM
     remediation_guidance: str = ""
     source: str = "manual"
+    scan_job_id: uuid.UUID | None = None
 
 
 class FindingUpdate(BaseModel):

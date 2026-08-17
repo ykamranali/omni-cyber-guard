@@ -33,14 +33,27 @@ export default function AssetsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [scanIdFilter, setScanIdFilter] = useState<string>("all");
+
   useEffect(() => {
     const fromUrl = new URLSearchParams(window.location.search).get("search");
     if (fromUrl) setSearch(fromUrl);
   }, []);
 
+  const { data: scans } = useQuery({
+    queryKey: ["scans"],
+    queryFn: () => api.get<any[]>("/scans"),
+  });
+
   const { data: assets, isLoading, isError } = useQuery({
-    queryKey: ["assets", search],
-    queryFn: () => api.get<AssetOut[]>(`/assets${search ? `?search=${encodeURIComponent(search)}` : ""}`),
+    queryKey: ["assets", search, scanIdFilter],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (search) params.append("search", search);
+      if (scanIdFilter !== "all") params.append("scan_id", scanIdFilter);
+      const queryStr = params.toString();
+      return api.get<AssetOut[]>(`/assets${queryStr ? `?${queryStr}` : ""}`);
+    },
   });
 
   const createAsset = useMutation({
@@ -106,14 +119,28 @@ export default function AssetsPage() {
         </Link>
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="relative w-full max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-            <Input
-              placeholder="Search by hostname, IP, or vendor…"
-              className="pl-9"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+          <div className="flex flex-1 items-center gap-3">
+            <div className="relative w-full max-w-sm">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+              <Input
+                placeholder="Search by hostname, IP, or vendor…"
+                className="pl-9"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <select
+              value={scanIdFilter}
+              onChange={(e) => setScanIdFilter(e.target.value)}
+              className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              <option value="all">All Scans (Entire Inventory)</option>
+              {scans?.filter(s => s.status === "completed").map((s) => (
+                <option key={s.id} value={s.id}>
+                  Scan: {s.target_cidr} ({new Date(s.created_at).toLocaleDateString()})
+                </option>
+              ))}
+            </select>
           </div>
           <div className="flex gap-2">
             <input

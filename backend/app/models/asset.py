@@ -32,6 +32,9 @@ class Asset(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    scan_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("scan_jobs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     hostname: Mapped[str] = mapped_column(String(255), nullable=False)
     ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -57,4 +60,5 @@ class Asset(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     risk_score: Mapped[float] = mapped_column(default=0.0)
 
     organization: Mapped["Organization"] = relationship(back_populates="assets")
+    scan_job: Mapped["ScanJob"] = relationship("ScanJob")
     findings: Mapped[list["Finding"]] = relationship(back_populates="asset", cascade="all, delete-orphan")

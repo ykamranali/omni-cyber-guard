@@ -66,19 +66,33 @@ MOCK_THREATS = [
     },
 ]
 
+from app.services.threat_monitor import get_recent_threats, add_threat
+from pydantic import BaseModel
+
+class ThreatEventCreate(BaseModel):
+    title: str
+    description: str
+    severity: str
+    tags: list[str]
+
 @router.get("")
 def get_threat_intelligence(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    # Simulate a smart feed by randomizing the order slightly and returning it
-    feed = list(MOCK_THREATS)
-    random.seed(current_user.organization_id)
-    random.shuffle(feed)
-    
+    recent = get_recent_threats()
     return {
-        "global_risk_level": "ELEVATED",
-        "active_campaigns": 142,
-        "zero_days_tracked": 12,
-        "latest_advisories": feed
+        "global_risk_level": "ELEVATED" if any(e["severity"] == "CRITICAL" for e in recent) else "MONITORING",
+        "active_campaigns": len(recent),
+        "zero_days_tracked": 0,
+        "latest_advisories": recent
     }
+
+@router.post("/test-event", status_code=201)
+def trigger_test_event(
+    payload: ThreatEventCreate,
+    current_user: User = Depends(get_current_active_user)
+):
+    """Hidden endpoint to inject test events to demonstrate the live feed"""
+    add_threat(payload.title, payload.description, payload.severity, payload.tags)
+    return {"status": "success"}

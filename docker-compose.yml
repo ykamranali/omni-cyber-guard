@@ -45,6 +45,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
     volumes:
       - ./backend:/app
 

@@ -66,6 +66,44 @@ class PDFReportGenerator:
         # Footer
         elements.append(Paragraph("Powered by Omni Digital Solution", self.styles['Italic']))
 
+    def generate_technical_report(self, scan_id: str | None = None) -> bytes:
+        import uuid
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
+        elements = []
+
+        elements.append(Paragraph("OMNI CYBER GUARD", self.styles['CustomTitle']))
+        elements.append(Paragraph("Technical Vulnerability Report", self.styles['Subtitle']))
+        elements.append(Paragraph(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M')}", self.styles['Normal']))
+        if scan_id:
+            elements.append(Paragraph(f"Filtered by Scan ID: {scan_id}", self.styles['Normal']))
+        elements.append(Spacer(1, 30))
+
+        # Fetch findings
+        query = self.db.query(Finding).filter(Finding.organization_id == self.org_id, Finding.status == "open")
+        if scan_id:
+            query = query.filter(Finding.scan_job_id == uuid.UUID(scan_id))
+        
+        findings = query.order_by(Finding.severity).all()
+        
+        if not findings:
+            elements.append(Paragraph("No open vulnerabilities found for this criteria.", self.styles['Normal']))
+        else:
+            elements.append(Paragraph(f"Detailed Findings ({len(findings)})", self.styles['Heading2']))
+            elements.append(Spacer(1, 10))
+            
+            for f in findings:
+                elements.append(Paragraph(f"{f.severity.value.upper()}: {f.title}", self.styles['Heading3']))
+                elements.append(Paragraph(f"Asset ID: {f.asset_id}", self.styles['Normal']))
+                elements.append(Spacer(1, 5))
+                elements.append(Paragraph(f"{f.description}", self.styles['Normal']))
+                elements.append(Spacer(1, 5))
+                elements.append(Paragraph(f"Remediation: {f.remediation_guidance}", self.styles['Italic']))
+                elements.append(Spacer(1, 15))
+
+        elements.append(Spacer(1, 30))
+        elements.append(Paragraph("Powered by Omni Digital Solution", self.styles['Italic']))
+
         doc.build(elements)
         pdf_bytes = buffer.getvalue()
         buffer.close()

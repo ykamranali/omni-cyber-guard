@@ -31,9 +31,21 @@ export default function VulnerabilitiesPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  const [scanIdFilter, setScanIdFilter] = useState<string>("all");
+
+  const { data: scans } = useQuery({
+    queryKey: ["scans"],
+    queryFn: () => api.get<any[]>("/scans"),
+  });
+
   const { data: findings, isLoading, isError } = useQuery({
-    queryKey: ["findings"],
-    queryFn: () => api.get<FindingOut[]>("/findings"),
+    queryKey: ["findings", scanIdFilter],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (scanIdFilter !== "all") params.append("scan_id", scanIdFilter);
+      const queryStr = params.toString();
+      return api.get<FindingOut[]>(`/findings${queryStr ? `?${queryStr}` : ""}`);
+    },
   });
 
   const updateStatus = useMutation({
@@ -54,12 +66,29 @@ export default function VulnerabilitiesPage() {
     <>
       <Topbar title="Vulnerabilities" />
       <main className="flex-1 space-y-4 overflow-y-auto p-6">
-        <div className="flex flex-wrap items-center gap-3">
-          <FilterSelect label="Severity" value={severityFilter} onChange={setSeverityFilter}
-            options={["all", "critical", "high", "medium", "low", "info"]} />
-          <FilterSelect label="Status" value={statusFilter} onChange={setStatusFilter}
-            options={["all", ...STATUS_OPTIONS]} />
-          <span className="text-xs text-muted">{filtered.length} finding(s)</span>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <FilterSelect label="Severity" value={severityFilter} onChange={setSeverityFilter}
+              options={["all", "critical", "high", "medium", "low", "info"]} />
+            <FilterSelect label="Status" value={statusFilter} onChange={setStatusFilter}
+              options={["all", ...STATUS_OPTIONS]} />
+            <label className="flex items-center gap-2 text-xs text-muted">
+              Scan
+              <select
+                value={scanIdFilter}
+                onChange={(e) => setScanIdFilter(e.target.value)}
+                className="h-8 rounded-md border border-border bg-surface px-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                <option value="all">All Scans</option>
+                {scans?.filter(s => s.status === "completed").map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.target_cidr} ({new Date(s.created_at).toLocaleDateString()})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span className="text-xs text-muted">{filtered.length} finding(s)</span>
+          </div>
         </div>
 
         <Card className="overflow-hidden p-0">

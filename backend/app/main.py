@@ -51,11 +51,16 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
 
+from app.services.threat_monitor import start_sniffer
+
 @app.on_event("startup")
 def on_startup() -> None:
     # Creates exactly one super admin account (from .env) if the database is
     # completely empty. No demo/sample data is ever created automatically.
     ensure_bootstrap_admin()
+    
+    # Start the real-time threat monitor daemon
+    start_sniffer()
 
 
 @app.get("/api/health", tags=["Health"])
