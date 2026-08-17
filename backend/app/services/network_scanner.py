@@ -248,6 +248,12 @@ def _parse_nmap_xml(xml_text: str) -> list[ScannedHost]:
                     continue
                 service_el = port_el.find("service")
                 
+                # Fallback: if OS wasn't detected by fingerprint, check if a service leaked the OS
+                if not os_match and service_el is not None:
+                    ostype = service_el.get("ostype")
+                    if ostype:
+                        os_match = ostype
+
                 port_scripts: list[ScannedScript] = []
                 for script_el in port_el.findall("script"):
                     port_scripts.append(ScannedScript(id=script_el.get("id") or "unknown", output=script_el.get("output") or ""))
