@@ -25,7 +25,7 @@ class BlockedIPResponse(BaseModel):
 
 @router.get("/blocked-ips", response_model=List[BlockedIPResponse])
 def get_blocked_ips(
-    current_user: User = Depends(require_permission(Permission.VIEW_DASHBOARD))
+    current_user: User = Depends(require_permission(Permission.VIEW_FINDINGS))
 ):
     result = []
     for ip in blocked_ips:

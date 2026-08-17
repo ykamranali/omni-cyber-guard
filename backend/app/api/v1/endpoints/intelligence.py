@@ -15,7 +15,7 @@ router = APIRouter(prefix="/intelligence", tags=["Intelligence"])
 @router.get("/insights", response_model=List[Dict[str, Any]])
 def get_heuristic_insights(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission(Permission.VIEW_DASHBOARD))
+    current_user: User = Depends(require_permission(Permission.VIEW_FINDINGS))
 ):
     """
     Automated Security Intelligence (Heuristic Engine)

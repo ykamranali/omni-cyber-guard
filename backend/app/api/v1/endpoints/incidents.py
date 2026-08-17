@@ -18,7 +18,7 @@ def list_incidents(
     status: str | None = None,
     severity: str | None = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission(Permission.VIEW_DASHBOARD)),
+    current_user: User = Depends(require_permission(Permission.VIEW_FINDINGS)),
 ):
     query = db.query(Incident).filter(Incident.organization_id == current_user.organization_id)
     if status:
@@ -45,7 +45,7 @@ def create_incident(
 def get_incident(
     incident_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission(Permission.VIEW_DASHBOARD)),
+    current_user: User = Depends(require_permission(Permission.VIEW_FINDINGS)),
 ):
     incident = db.query(Incident).filter(Incident.id == incident_id, Incident.organization_id == current_user.organization_id).first()
     if not incident:
