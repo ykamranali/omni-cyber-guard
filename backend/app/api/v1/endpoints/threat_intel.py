@@ -84,8 +84,9 @@ def get_threat_intelligence(
     return {
         "global_risk_level": "ELEVATED" if any(e["severity"] == "CRITICAL" for e in recent) else "MONITORING",
         "active_campaigns": len(recent),
-        "zero_days_tracked": 0,
-        "latest_advisories": recent
+        "zero_days_tracked": len(MOCK_THREATS),
+        "latest_advisories": recent,
+        "global_cves": MOCK_THREATS
     }
 
 @router.post("/test-event", status_code=201)

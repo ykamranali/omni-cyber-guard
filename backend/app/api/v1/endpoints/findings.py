@@ -17,6 +17,7 @@ router = APIRouter(prefix="/findings", tags=["Findings"])
 @router.get("", response_model=list[FindingOut])
 def list_findings(
     scan_id: str | None = None,
+    asset_id: str | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(Permission.VIEW_FINDINGS)),
 ):
@@ -26,6 +27,11 @@ def list_findings(
             query = query.filter(Finding.scan_job_id == uuid.UUID(scan_id))
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid scan_id format")
+    if asset_id:
+        try:
+            query = query.filter(Finding.asset_id == uuid.UUID(asset_id))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid asset_id format")
     return query.all()
 
 

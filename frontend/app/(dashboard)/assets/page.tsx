@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AssetFormModal, AssetFormValues } from "@/components/assets/asset-form-modal";
+import { AssetDrawer } from "@/components/assets/asset-drawer";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 
@@ -37,6 +38,7 @@ export default function AssetsPage() {
 
   const [scanIdFilter, setScanIdFilter] = useState<string>("all");
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(["manual"]));
+  const [profiledAsset, setProfiledAsset] = useState<AssetOut | null>(null);
 
   useEffect(() => {
     const fromUrl = new URLSearchParams(window.location.search).get("search");
@@ -306,8 +308,12 @@ export default function AssetsPage() {
                           </thead>
                           <tbody>
                             {groupAssets.map((asset) => (
-                              <tr key={asset.id} className="border-b border-border/60 hover:bg-surface-hover/40">
-                                <td className="px-4 py-3">
+                              <tr 
+                                key={asset.id} 
+                                className="border-b border-border/60 hover:bg-surface-hover/40 cursor-pointer"
+                                onClick={() => setProfiledAsset(asset)}
+                              >
+                                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                                   <input
                                     type="checkbox"
                                     className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
@@ -353,6 +359,11 @@ export default function AssetsPage() {
         onClose={() => setModalOpen(false)}
         submitting={createAsset.isPending}
         onSubmit={(values) => createAsset.mutate(values)}
+      />
+
+      <AssetDrawer 
+        asset={profiledAsset} 
+        onClose={() => setProfiledAsset(null)} 
       />
     </>
   );

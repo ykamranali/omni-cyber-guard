@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Topbar } from "@/components/layout/topbar";
-import { FileWarning, Plus, Search, Shield, AlertTriangle } from "lucide-react";
+import { Plus, Shield, AlertTriangle, ArrowRight, ArrowLeft } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -19,96 +19,106 @@ interface Incident {
   resolved_at: string | null;
 }
 
+const COLUMNS = [
+  { id: "open", title: "Open / Triage", color: "border-red-500/50 bg-red-500/5" },
+  { id: "investigating", title: "Investigating", color: "border-orange-500/50 bg-orange-500/5" },
+  { id: "resolved", title: "Resolved", color: "border-green-500/50 bg-green-500/5" }
+] as const;
+
 export default function IncidentsPage() {
-  const [statusFilter, setStatusFilter] = useState("all");
+  const queryClient = useQueryClient();
 
   const { data: incidents, isLoading } = useQuery({
     queryKey: ["incidents"],
     queryFn: () => api.get<Incident[]>("/incidents"),
   });
 
-  const filteredIncidents = incidents?.filter(i => statusFilter === "all" || i.status === statusFilter) || [];
+  const updateStatus = useMutation({
+    mutationFn: ({ id, status }: { id: string, status: Incident["status"] }) => 
+      api.patch(`/incidents/${id}`, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["incidents"] });
+    }
+  });
 
   return (
     <>
-      <Topbar title="Incident Response" />
-      <main className="flex-1 space-y-6 overflow-y-auto p-6">
-        <div className="flex flex-wrap justify-between items-center gap-4">
+      <Topbar title="Incident Response Playbook" />
+      <main className="flex-1 flex flex-col overflow-hidden p-6 bg-background">
+        <div className="flex flex-wrap justify-between items-center gap-4 mb-6 shrink-0">
           <div>
-            <h1 className="text-2xl font-bold text-ink">Incident Management</h1>
-            <p className="text-sm text-muted">Track and manage active security incidents and response lifecycles.</p>
+            <h1 className="text-2xl font-bold text-ink neon-text">Active Triage Board</h1>
+            <p className="text-sm text-muted uppercase tracking-wider font-bold">Manage security incidents and coordinate response playbooks.</p>
           </div>
-          <Button><Plus size={16} className="mr-2" /> Report Incident</Button>
+          <Button className="shadow-neon"><Plus size={16} className="mr-2" /> Report Incident</Button>
         </div>
 
-        <div className="flex gap-2 border-b border-border pb-4">
-          {["all", "open", "investigating", "contained", "resolved"].map(status => (
-            <button
-              key={status}
-              onClick={() => setStatusFilter(status)}
-              className={cn(
-                "px-4 py-2 rounded-full text-sm font-medium capitalize",
-                statusFilter === status ? "bg-primary text-white" : "bg-surface text-muted hover:bg-surface-hover hover:text-ink border border-border"
-              )}
-            >
-              {status}
-            </button>
-          ))}
-        </div>
+        <div className="flex-1 flex gap-6 overflow-x-auto pb-4">
+          {COLUMNS.map((col) => {
+            const colIncidents = incidents?.filter(i => {
+              if (col.id === "resolved") return i.status === "resolved" || i.status === "contained";
+              return i.status === col.id;
+            }) || [];
 
-        <div className="grid gap-4">
-          {isLoading ? (
-            <div className="p-8 text-center text-muted">Loading incidents...</div>
-          ) : filteredIncidents.length === 0 ? (
-            <div className="rounded-xl border border-border bg-surface p-12 text-center text-muted">
-              <FileWarning className="mx-auto h-12 w-12 opacity-20 mb-4" />
-              <p>No incidents match the current filters.</p>
-            </div>
-          ) : (
-            filteredIncidents.map(incident => (
-              <div key={incident.id} className="flex gap-4 p-5 rounded-xl border border-border bg-surface hover:bg-surface-hover/50 transition-colors">
-                <div className="mt-1 flex-shrink-0">
-                  {incident.severity === "critical" ? (
-                    <AlertTriangle className="h-6 w-6 text-red-500" />
-                  ) : incident.severity === "high" ? (
-                    <AlertTriangle className="h-6 w-6 text-orange-500" />
-                  ) : (
-                    <Shield className="h-6 w-6 text-blue-500" />
-                  )}
+            return (
+              <div key={col.id} className={cn("flex flex-col w-96 shrink-0 rounded-2xl border-t-4 bg-surface/40 backdrop-blur-md shadow-glass", col.color)}>
+                <div className="p-4 border-b border-border/50 flex justify-between items-center bg-surface/50 rounded-t-2xl">
+                  <h2 className="font-bold tracking-widest uppercase text-sm">{col.title}</h2>
+                  <span className="bg-surface border border-border px-2 py-0.5 rounded-full text-xs font-mono">{colIncidents.length}</span>
                 </div>
-                <div className="flex-1 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-semibold text-ink">{incident.title}</h3>
-                      <div className="mt-1 flex items-center gap-3 text-xs text-muted">
-                        <span className="font-mono text-primary truncate max-w-[150px]">{incident.id}</span>
-                        <span>•</span>
-                        <span>Opened {formatDistanceToNow(new Date(incident.created_at), { addSuffix: true })}</span>
+                
+                <div className="flex-1 p-4 overflow-y-auto space-y-4">
+                  {isLoading && <div className="text-center text-muted text-sm p-4">Loading...</div>}
+                  {colIncidents.length === 0 && !isLoading && (
+                    <div className="text-center text-muted text-xs p-8 opacity-50 border border-dashed border-border rounded-xl">No active incidents here.</div>
+                  )}
+                  {colIncidents.map(incident => (
+                    <div key={incident.id} className="hud-panel p-4 flex flex-col gap-3 group relative hover:border-primary/50 transition-colors">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-2">
+                          {incident.severity === "critical" ? <AlertTriangle size={16} className="text-red-500 animate-pulse" /> : 
+                           incident.severity === "high" ? <AlertTriangle size={16} className="text-orange-500" /> : 
+                           <Shield size={16} className="text-blue-500" />}
+                          <span className={cn(
+                            "text-[10px] uppercase font-bold tracking-wider px-1.5 rounded",
+                            incident.severity === "critical" ? "bg-red-500/20 text-red-500" :
+                            incident.severity === "high" ? "bg-orange-500/20 text-orange-500" :
+                            "bg-blue-500/20 text-blue-500"
+                          )}>{incident.severity}</span>
+                        </div>
+                        <span className="text-[10px] text-muted font-mono">{formatDistanceToNow(new Date(incident.created_at))} ago</span>
+                      </div>
+                      
+                      <div>
+                        <h3 className="text-sm font-semibold text-ink line-clamp-2 leading-tight mb-1">{incident.title}</h3>
+                        <p className="text-xs text-muted line-clamp-2 leading-relaxed">{incident.description || "No playbook details provided."}</p>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-2 pt-3 border-t border-border/50">
+                        <span className="text-[9px] text-muted font-mono truncate max-w-[120px]">ID: {incident.id.split('-')[0]}</span>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {col.id !== "open" && (
+                            <button 
+                              onClick={() => updateStatus.mutate({ id: incident.id, status: col.id === "resolved" ? "investigating" : "open" })}
+                              className="p-1 hover:bg-surface-hover rounded text-muted hover:text-ink"
+                              title="Move Back"
+                            ><ArrowLeft size={14} /></button>
+                          )}
+                          {col.id !== "resolved" && (
+                            <button 
+                              onClick={() => updateStatus.mutate({ id: incident.id, status: col.id === "open" ? "investigating" : "resolved" })}
+                              className="p-1 hover:bg-surface-hover rounded text-muted hover:text-primary"
+                              title="Advance Status"
+                            ><ArrowRight size={14} /></button>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                       <span className={cn(
-                        "inline-flex rounded-full px-2 py-0.5 text-xs font-semibold uppercase",
-                        incident.status === "resolved" ? "bg-green-500/10 text-green-500" :
-                        incident.status === "open" ? "bg-red-500/10 text-red-500" : "bg-blue-500/10 text-blue-500"
-                      )}>
-                        {incident.status}
-                      </span>
-                      <span className={cn(
-                        "inline-flex rounded-full px-2 py-0.5 text-xs font-semibold uppercase",
-                        incident.severity === "critical" ? "bg-red-500/10 text-red-500" :
-                        incident.severity === "high" ? "bg-orange-500/10 text-orange-500" :
-                        "bg-yellow-500/10 text-yellow-500"
-                      )}>
-                        {incident.severity}
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-sm text-ink/80">{incident.description || "No description provided."}</p>
+                  ))}
                 </div>
               </div>
-            ))
-          )}
+            );
+          })}
         </div>
       </main>
     </>

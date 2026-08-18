@@ -19,6 +19,7 @@ import { RecentScans } from "@/components/dashboard/recent-scans";
 import { RiskTrendChart } from "@/components/dashboard/risk-trend-chart";
 import { ComplianceRings } from "@/components/dashboard/compliance-rings";
 import { SystemStatusWidget } from "@/components/dashboard/system-status";
+import { ActivityTicker } from "@/components/dashboard/activity-ticker";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 
@@ -231,6 +232,11 @@ export default function DashboardPage() {
                 <SystemStatusWidget overallStatus={systemStatus.overall_status} components={systemStatus.components} />
               </Card>
             )}
+
+            <Card className="hud-panel lg:col-span-3 border-secondary/40 shadow-[inset_0_0_20px_rgba(124,58,237,0.1)]">
+              <CardHeader className="border-b border-secondary/20"><CardTitle className="text-secondary neon-text flex items-center gap-2"><Activity size={18} className="animate-pulse-glow" /> Live Threat Activity Ticker</CardTitle></CardHeader>
+              <ActivityTicker />
+            </Card>
           </div>
         )}
       </main>

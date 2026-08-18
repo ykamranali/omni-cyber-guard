@@ -22,6 +22,7 @@ interface ThreatIntel {
   active_campaigns: number;
   zero_days_tracked: number;
   latest_advisories: ThreatEvent[];
+  global_cves?: ThreatEvent[];
 }
 
 export default function ThreatIntelligencePage() {
@@ -176,6 +177,46 @@ export default function ThreatIntelligencePage() {
             )}
           </div>
         </div>
+
+        {data?.global_cves && (
+          <div className="mt-8 rounded-xl border border-border bg-surface overflow-hidden shadow-glass">
+            <div className="border-b border-border bg-surface-hover/50 p-4">
+              <h2 className="text-lg font-bold text-ink flex items-center gap-2"><Satellite size={18} className="text-purple-500" /> Global Threat Intelligence (CVEs)</h2>
+              <p className="text-xs text-muted mt-1">Latest vulnerabilities tracked globally that may affect your infrastructure.</p>
+            </div>
+            <div className="divide-y divide-border/50">
+              {data.global_cves.map((cve) => (
+                <div key={cve.id} className="p-5 flex gap-4 hover:bg-surface-hover/30 transition-colors">
+                  <div className="mt-1 flex-shrink-0">
+                    <ShieldAlert size={20} className={cn(
+                      cve.severity === "CRITICAL" ? "text-critical" : 
+                      cve.severity === "HIGH" ? "text-orange-500" : "text-yellow-500"
+                    )} />
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-ink">{cve.title}</h3>
+                      <span className={cn(
+                        "inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",
+                        cve.severity === "CRITICAL" ? "bg-red-500/10 text-red-500" :
+                        cve.severity === "HIGH" ? "bg-orange-500/10 text-orange-500" : "bg-yellow-500/10 text-yellow-500"
+                      )}>{cve.severity}</span>
+                    </div>
+                    <p className="text-xs text-muted font-mono">{cve.id} • Published {formatDistanceToNow(new Date((cve as any).published_at || cve.timestamp), { addSuffix: true })}</p>
+                    <p className="text-sm text-ink/80">{cve.description}</p>
+                    <div className="flex gap-2 pt-2">
+                      {cve.tags.map((tag) => (
+                        <span key={tag} className="rounded border border-border bg-surface-hover px-2 py-0.5 text-[10px] font-medium text-muted">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </main>
     </>
   );
