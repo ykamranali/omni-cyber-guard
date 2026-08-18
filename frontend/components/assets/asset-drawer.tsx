@@ -56,8 +56,8 @@ export function AssetDrawer({ asset, onClose }: { asset: AssetOut | null; onClos
           <div className="grid grid-cols-2 gap-4">
             <div className="p-4 rounded-xl border border-border bg-surface-hover/30 text-center">
               <p className="text-xs text-muted uppercase tracking-wider mb-1">Risk Score</p>
-              <p className={cn("text-3xl font-mono font-bold drop-shadow-md", asset.risk_score > 66 ? "text-critical" : asset.risk_score > 33 ? "text-orange-500" : "text-green-500")}>
-                {asset.risk_score.toFixed(0)}
+              <p className={cn("text-3xl font-mono font-bold drop-shadow-md", (asset.risk_score || 0) > 66 ? "text-critical" : (asset.risk_score || 0) > 33 ? "text-orange-500" : "text-green-500")}>
+                {(asset.risk_score || 0).toFixed(0)}
               </p>
             </div>
             <div className="p-4 rounded-xl border border-border bg-surface-hover/30 text-center">
@@ -69,7 +69,7 @@ export function AssetDrawer({ asset, onClose }: { asset: AssetOut | null; onClos
           <div className="space-y-3">
             <h3 className="text-xs font-bold text-muted uppercase tracking-widest flex items-center gap-2"><Cpu size={14}/> System Details</h3>
             <div className="p-4 rounded-xl border border-border bg-surface-hover/30 space-y-2 text-sm">
-              <div className="flex justify-between border-b border-border/50 pb-2"><span className="text-muted">Type:</span> <span className="capitalize">{asset.asset_type.replace(/_/g, " ")}</span></div>
+              <div className="flex justify-between border-b border-border/50 pb-2"><span className="text-muted">Type:</span> <span className="capitalize">{asset.asset_type?.replace(/_/g, " ") || "Unknown"}</span></div>
               <div className="flex justify-between border-b border-border/50 pb-2 pt-1"><span className="text-muted">OS:</span> <span>{asset.operating_system || "Unknown"}</span></div>
               <div className="flex justify-between border-b border-border/50 pb-2 pt-1"><span className="text-muted">MAC:</span> <span className="font-mono">{asset.mac_address || "Unknown"}</span></div>
               <div className="flex justify-between border-b border-border/50 pb-2 pt-1"><span className="text-muted">Vendor:</span> <span>{asset.vendor || "Unknown"}</span></div>
@@ -96,7 +96,7 @@ export function AssetDrawer({ asset, onClose }: { asset: AssetOut | null; onClos
                         <span>•</span>
                         <span>{finding.status}</span>
                         <span>•</span>
-                        <span>{formatDistanceToNow(new Date(finding.created_at))} ago</span>
+                        <span>{finding.created_at ? `${formatDistanceToNow(new Date(finding.created_at))} ago` : "Unknown time"}</span>
                       </div>
                     </div>
                   </div>

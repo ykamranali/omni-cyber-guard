@@ -1,5 +1,6 @@
 import uuid
 from pydantic import BaseModel, ConfigDict
+from datetime import datetime
 from app.models.finding import Severity, FindingStatus
 
 
@@ -17,6 +18,8 @@ class FindingOut(BaseModel):
     remediation_guidance: str
     source: str
     scan_job_id: uuid.UUID | None
+    created_at: datetime
+    updated_at: datetime
 
 
 class FindingCreate(BaseModel):
