@@ -37,6 +37,7 @@ class ScanJob(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     target_cidr: Mapped[str] = mapped_column(String(64), nullable=False)
     scan_type: Mapped[ScanType] = mapped_column(Enum(ScanType), default=ScanType.PORT_SERVICE_SCAN)
+    engine: Mapped[str] = mapped_column(String(32), default="nmap", server_default="nmap")
     status: Mapped[ScanStatus] = mapped_column(Enum(ScanStatus), default=ScanStatus.QUEUED)
 
     hosts_discovered: Mapped[int] = mapped_column(Integer, default=0)

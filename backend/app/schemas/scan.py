@@ -7,6 +7,7 @@ from app.models.scan_job import ScanStatus, ScanType
 
 class ScanJobCreate(BaseModel):
     target_cidr: str
+    engine: str = "nmap"
 
     @field_validator("target_cidr")
     @classmethod
@@ -22,6 +23,7 @@ class ScanJobOut(BaseModel):
     id: uuid.UUID
     target_cidr: str
     scan_type: ScanType
+    engine: str
     status: ScanStatus
     hosts_discovered: int
     findings_generated: int

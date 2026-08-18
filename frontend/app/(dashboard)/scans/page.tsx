@@ -25,6 +25,7 @@ interface ScanJobOut {
   id: string;
   target_cidr: string;
   scan_type: string;
+  engine: string;
   status: "queued" | "running" | "completed" | "failed";
   hosts_discovered: number;
   findings_generated: number;
@@ -44,6 +45,7 @@ const STATUS_META: Record<string, { icon: JSX.Element; label: string; color: str
 export default function ScanCenterPage() {
   const queryClient = useQueryClient();
   const [cidr, setCidr] = useState("");
+  const [engine, setEngine] = useState("nmap");
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -83,7 +85,7 @@ export default function ScanCenterPage() {
   });
   
   const startScan = useMutation({
-    mutationFn: () => api.post<ScanJobOut>("/scans", { target_cidr: cidr }),
+    mutationFn: () => api.post<ScanJobOut>("/scans", { target_cidr: cidr, engine: engine }),
     onSuccess: (job) => {
       queryClient.invalidateQueries({ queryKey: ["scans"] });
       setExpandedId(job.id);
@@ -160,20 +162,38 @@ export default function ScanCenterPage() {
           </CardHeader>
 
           <p className="mb-4 text-sm text-muted">
-            Runs a real, nmap-backed host discovery and port/service scan — the same kind of authorized
-            reconnaissance tools like Nessus or OpenVAS perform. Only private (RFC1918) or loopback ranges
-            are permitted; public IP ranges are rejected before anything is sent.{" "}
-            <strong className="text-ink/80">Only scan networks you own or are explicitly authorized to assess.</strong>{" "}
-            Discovered hosts are added to your asset inventory automatically, and risky exposed services
-            (Telnet, RDP, exposed databases, etc.) become real findings with remediation guidance.
+            Choose your scanning engine. <strong>Nmap</strong> is used for fast host and port discovery. <strong>Nuclei</strong> provides fast, template-based vulnerability scanning. <strong>OWASP ZAP</strong> spiders and attacks web applications. <strong>OpenVAS</strong> performs deep, full-infrastructure vulnerability checks.
           </p>
+
+          <div className="mb-6 grid grid-cols-2 gap-4">
+            {[
+              { id: "nmap", name: "Nmap Network Scanner", desc: "Fast port & service discovery." },
+              { id: "nuclei", name: "Nuclei Vulnerability Scanner", desc: "Fast, template-based vulnerability scanning." },
+              { id: "zap", name: "OWASP ZAP Web Scanner", desc: "Deep web application spidering & injection." },
+              { id: "openvas", name: "OpenVAS Infrastructure Scanner", desc: "Comprehensive CVE checks." },
+            ].map(eng => (
+              <div 
+                key={eng.id}
+                onClick={() => setEngine(eng.id)}
+                className={`p-4 rounded-xl border cursor-pointer transition-all ${engine === eng.id ? "border-primary bg-primary/10 shadow-neon" : "border-border bg-surface-hover/30 hover:border-primary/50"}`}
+              >
+                <div className="flex items-center gap-3">
+                  <Radar size={18} className={engine === eng.id ? "text-primary animate-pulse" : "text-muted"} />
+                  <div>
+                    <h4 className="text-sm font-bold text-ink">{eng.name}</h4>
+                    <p className="text-xs text-muted">{eng.desc}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
 
           <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
             <div className="min-w-[240px] flex-1">
-              <label className="mb-1 block text-xs text-muted">Target CIDR range</label>
+              <label className="mb-1 block text-xs text-muted">Target CIDR or URL</label>
               <Input
                 required
-                placeholder="e.g. 192.168.1.0/24 (find your own with ipconfig / ifconfig)"
+                placeholder="e.g. 192.168.1.0/24 or https://target.local"
                 value={cidr}
                 onChange={(e) => setCidr(e.target.value)}
               />
@@ -326,9 +346,14 @@ export default function ScanCenterPage() {
                         <div className="flex items-center gap-3">
                           <span className={meta.color}>{meta.icon}</span>
                           <div>
-                            <p className="text-sm font-medium text-ink">{s.target_cidr}</p>
+                            <p className="text-sm font-medium text-ink flex items-center gap-2">
+                              {s.target_cidr} 
+                              <span className="px-2 py-0.5 rounded-full bg-surface-hover border border-border text-[10px] uppercase font-bold tracking-wider text-primary">
+                                {s.engine}
+                              </span>
+                            </p>
                             <p className="text-xs text-muted">
-                              {new Date(s.created_at).toLocaleString()} · {s.scan_type.replace(/_/g, " ")}
+                              {new Date(s.created_at).toLocaleString()}
                             </p>
                           </div>
                         </div>

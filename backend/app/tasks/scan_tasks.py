@@ -31,10 +31,10 @@ def run_network_scan(scan_job_id: str) -> None:
 
         try:
             from app.scanners.manager import ScannerManager
-            nmap_scanner = ScannerManager.get_scanner("nmap")
+            scanner = ScannerManager.get_scanner(job.engine)
             
-            if not nmap_scanner:
-                raise RuntimeError("Nmap scanner plugin not registered.")
+            if not scanner:
+                raise RuntimeError(f"Scanner plugin '{job.engine}' not registered.")
                 
             def log_progress(line: str):
                 db_session = SessionLocal()
@@ -48,10 +48,14 @@ def run_network_scan(scan_job_id: str) -> None:
                 finally:
                     db_session.close()
                 
-            nmap_result = nmap_scanner.execute(job.target_cidr, progress_callback=log_progress)
-            hosts = nmap_result.raw_data
+            scan_result = scanner.execute(job.target_cidr, progress_callback=log_progress)
             
-        except (RuntimeError, Exception) as exc: # catching ScanAuthorizationError via Exception for now since it's wrapped
+            # If it's nmap, it returns hosts. Otherwise it returns findings directly (for now).
+            hosts = getattr(scan_result, 'raw_data', [])
+            findings_generated = getattr(scan_result, 'findings_generated', 0)
+            mock_findings = getattr(scan_result, 'findings', [])
+            
+        except (RuntimeError, Exception) as exc:
             from app.services.network_scanner import ScanAuthorizationError
             if isinstance(exc, ScanAuthorizationError) or isinstance(exc, RuntimeError):
                 job.status = ScanStatus.FAILED
@@ -247,6 +251,43 @@ def run_network_scan(scan_job_id: str) -> None:
                         futures = [executor.submit(scan_target, t, asset) for t in targets]
                         for future in concurrent.futures.as_completed(futures):
                             findings_generated += future.result()
+
+        # If it was a mock scanner or nuclei run directly, write its findings to a "target" asset
+        if not hosts and mock_findings:
+            # Create a placeholder asset for the target CIDR/URL if it doesn't exist
+            asset = db.query(Asset).filter(Asset.organization_id == job.organization_id, Asset.ip_address == job.target_cidr).first()
+            if not asset:
+                asset = Asset(
+                    organization_id=job.organization_id,
+                    hostname=job.target_cidr,
+                    ip_address=job.target_cidr,
+                    asset_type=AssetType.OTHER,
+                    status=AssetStatus.ACTIVE,
+                    scan_job_id=job.id,
+                )
+                db.add(asset)
+                db.flush()
+                touched_assets.append(asset)
+            
+            for f in mock_findings:
+                db_severity = Severity.INFO
+                sev_str = f.get("severity", "info").lower()
+                if sev_str == "critical": db_severity = Severity.CRITICAL
+                elif sev_str == "high": db_severity = Severity.HIGH
+                elif sev_str == "medium": db_severity = Severity.MEDIUM
+                elif sev_str == "low": db_severity = Severity.LOW
+
+                db.add(Finding(
+                    organization_id=job.organization_id,
+                    asset_id=asset.id,
+                    title=f.get("title", "Scanner Finding"),
+                    description=f.get("description", "") + "\n\nEvidence:\n" + f.get("evidence", ""),
+                    severity=db_severity,
+                    status=FindingStatus.OPEN,
+                    remediation_guidance=f.get("remediation_guidance", ""),
+                    source=f.get("source", job.engine),
+                    scan_job_id=job.id,
+                ))
 
         db.commit()
 

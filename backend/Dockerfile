@@ -3,8 +3,12 @@ FROM python:3.12-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc libpq-dev curl nmap \
+    gcc libpq-dev curl nmap unzip \
     && rm -rf /var/lib/apt/lists/*
+
+RUN curl -L https://github.com/projectdiscovery/nuclei/releases/download/v3.2.0/nuclei_3.2.0_linux_amd64.zip -o nuclei.zip \
+    && unzip nuclei.zip -d /usr/local/bin/ \
+    && rm nuclei.zip
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

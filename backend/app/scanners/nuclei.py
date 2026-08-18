@@ -25,30 +25,54 @@ class NucleiScanner(Scanner):
             return True
         return False
 
-    def execute(self, target: str, **kwargs) -> ScannerResult:
+    def execute(self, target: str, progress_callback: Any = None, **kwargs) -> ScannerResult:
         if not self.is_available():
             raise RuntimeError("The 'nuclei' binary is not installed in this environment.")
         
-        # We run nuclei and output to a temporary JSON file
+        findings = []
+        if progress_callback:
+            progress_callback(f"Initializing Nuclei vulnerability scan against {target}...\n")
+            progress_callback("This may take several minutes depending on the target scope.\n\n")
+
         with tempfile.NamedTemporaryFile(suffix=".json") as tmp_file:
             cmd = [
                 "nuclei",
                 "-target", target,
-                "-json-export", tmp_file.name,
-                "-silent"
+                "-json-export", tmp_file.name
             ]
+            
             try:
-                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600, check=False)
+                # We use Popen to stream the output for the progress callback
+                proc = subprocess.Popen(
+                    cmd, 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.STDOUT, 
+                    text=True,
+                    bufsize=1
+                )
+                
+                # Stream the terminal output
+                for line in iter(proc.stdout.readline, ''):
+                    if progress_callback and line.strip():
+                        progress_callback(line)
+                
+                proc.stdout.close()
+                return_code = proc.wait(timeout=600)
+                
+                if return_code != 0 and not tmp_file.read():
+                    raise RuntimeError(f"Nuclei scan failed (exit {return_code})")
+                
             except subprocess.TimeoutExpired as exc:
+                if 'proc' in locals():
+                    proc.kill()
                 raise RuntimeError(f"Nuclei scan of {target} timed out.") from exc
             
-            if proc.returncode != 0 and not tmp_file.read():
-                raise RuntimeError(f"Nuclei scan failed (exit {proc.returncode}): {proc.stderr.strip()[:2000]}")
-            
+            if progress_callback:
+                progress_callback("\nNuclei scan completed. Parsing vulnerability report...\n")
+
             # Read results
             tmp_file.seek(0)
             lines = tmp_file.readlines()
-            findings = []
             for line in lines:
                 if line.strip():
                     try:
