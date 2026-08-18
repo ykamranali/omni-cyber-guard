@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, Plus, Download, Upload, Trash2, Radar, ArrowRight } from "lucide-react";
+import { Search, Plus, Download, Upload, Trash2, Radar, ArrowRight, Folder, ChevronDown, ChevronRight } from "lucide-react";
 
 import { Topbar } from "@/components/layout/topbar";
 import { Card } from "@/components/ui/card";
@@ -18,6 +18,7 @@ interface AssetOut {
   id: string;
   hostname: string;
   ip_address: string | null;
+  mac_address: string | null;
   asset_type: string;
   status: string;
   operating_system: string | null;
@@ -25,6 +26,7 @@ interface AssetOut {
   site: string | null;
   department: string | null;
   risk_score: number;
+  scan_job_id: string | null;
 }
 
 export default function AssetsPage() {
@@ -34,6 +36,7 @@ export default function AssetsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [scanIdFilter, setScanIdFilter] = useState<string>("all");
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(["manual"]));
 
   useEffect(() => {
     const fromUrl = new URLSearchParams(window.location.search).get("search");
@@ -55,6 +58,32 @@ export default function AssetsPage() {
       return api.get<AssetOut[]>(`/assets${queryStr ? `?${queryStr}` : ""}`);
     },
   });
+
+  // Group assets by scan_job_id
+  const groupedAssets = useMemo(() => {
+    if (!assets) return {};
+    const groups: Record<string, AssetOut[]> = { manual: [] };
+    
+    if (scans) {
+      scans.filter(s => s.status === "completed").forEach(s => {
+        groups[s.id] = [];
+      });
+    }
+
+    assets.forEach(asset => {
+      const key = asset.scan_job_id || "manual";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(asset);
+    });
+    return groups;
+  }, [assets, scans]);
+
+  const toggleFolder = (folderId: string) => {
+    const newSet = new Set(expandedFolders);
+    if (newSet.has(folderId)) newSet.delete(folderId);
+    else newSet.add(folderId);
+    setExpandedFolders(newSet);
+  };
 
   const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(new Set());
 
@@ -95,13 +124,18 @@ export default function AssetsPage() {
     setSelectedAssetIds(newSet);
   };
 
-  const toggleAllAssets = () => {
-    if (!assets) return;
-    if (selectedAssetIds.size === assets.length) {
-      setSelectedAssetIds(new Set());
+  const toggleGroupAssets = (groupAssets: AssetOut[]) => {
+    if (!groupAssets || groupAssets.length === 0) return;
+    const groupAssetIds = groupAssets.map(a => a.id);
+    const allSelected = groupAssetIds.every(id => selectedAssetIds.has(id));
+    
+    const newSet = new Set(selectedAssetIds);
+    if (allSelected) {
+      groupAssetIds.forEach(id => newSet.delete(id));
     } else {
-      setSelectedAssetIds(new Set(assets.map(a => a.id)));
+      groupAssetIds.forEach(id => newSet.add(id));
     }
+    setSelectedAssetIds(newSet);
   };
 
   async function handleExport() {
@@ -205,71 +239,113 @@ export default function AssetsPage() {
           </div>
         </div>
 
-        <Card className="overflow-hidden p-0">
-          {isLoading && <p className="p-6 text-sm text-muted">Loading assets…</p>}
-          {isError && <p className="p-6 text-sm text-critical">Unable to load assets from the API.</p>}
-          {assets && assets.length === 0 && <p className="p-6 text-sm text-muted">No assets found. Add your first asset, import a CSV, or run a network scan to get started.</p>}
+        <div className="space-y-4">
+          {isLoading && <Card className="p-6"><p className="text-sm text-muted">Loading assets…</p></Card>}
+          {isError && <Card className="p-6"><p className="text-sm text-critical">Unable to load assets from the API.</p></Card>}
+          {assets && assets.length === 0 && (
+            <Card className="p-6">
+              <p className="text-sm text-muted">No assets found. Add your first asset, import a CSV, or run a network scan to get started.</p>
+            </Card>
+          )}
 
           {assets && assets.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-border bg-surface-hover/50 text-xs uppercase tracking-wide text-muted">
-                  <tr>
-                    <th className="px-4 py-3 font-medium w-10">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
-                        checked={assets && assets.length > 0 && selectedAssetIds.size === assets.length}
-                        onChange={toggleAllAssets}
-                      />
-                    </th>
-                    <th className="px-4 py-3 font-medium">Hostname</th>
-                    <th className="px-4 py-3 font-medium">IP Address</th>
-                    <th className="px-4 py-3 font-medium">Type</th>
-                    <th className="px-4 py-3 font-medium">Status</th>
-                    <th className="px-4 py-3 font-medium">OS</th>
-                    <th className="px-4 py-3 font-medium">Site</th>
-                    <th className="px-4 py-3 font-medium">Risk Score</th>
-                    <th className="px-4 py-3 font-medium"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {assets.map((asset) => (
-                    <tr key={asset.id} className="border-b border-border/60 hover:bg-surface-hover/40">
-                      <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
-                          checked={selectedAssetIds.has(asset.id)}
-                          onChange={() => toggleAssetSelection(asset.id)}
-                        />
-                      </td>
-                      <td className="px-4 py-3 font-medium text-ink">{asset.hostname}</td>
-                      <td className="px-4 py-3 text-ink/75">{asset.ip_address || "—"}</td>
-                      <td className="px-4 py-3 capitalize text-ink/75">{asset.asset_type.replace(/_/g, " ")}</td>
-                      <td className="px-4 py-3"><Badge label={asset.status} /></td>
-                      <td className="px-4 py-3 text-ink/75">{asset.operating_system || "—"}</td>
-                      <td className="px-4 py-3 text-ink/75">{asset.site || "—"}</td>
-                      <td className="px-4 py-3">
-                        <span className={asset.risk_score > 66 ? "text-critical" : asset.risk_score > 33 ? "text-medium" : "text-low"}>
-                          {asset.risk_score.toFixed(0)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => deleteAsset.mutate(asset.id)}
-                          className="rounded-md p-1.5 text-muted hover:bg-critical/10 hover:text-critical"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <>
+              {Object.entries(groupedAssets).map(([groupId, groupAssets]) => {
+                const isManual = groupId === "manual";
+                const scan = scans?.find(s => s.id === groupId);
+                
+                if (!isManual && !scan) return null;
+                if (isManual && groupAssets.length === 0 && (scans?.filter(s => s.status === "completed").length || 0) > 0) return null;
+
+                const isExpanded = expandedFolders.has(groupId);
+                const title = isManual ? "Manual / Uncategorized Assets" : `Scan Folder: ${scan.target_cidr} (${new Date(scan.created_at).toLocaleDateString()})`;
+                const allSelected = groupAssets.length > 0 && groupAssets.every(a => selectedAssetIds.has(a.id));
+
+                return (
+                  <Card key={groupId} className="overflow-hidden p-0 transition-all">
+                    <div 
+                      className="flex cursor-pointer items-center justify-between border-b border-border px-5 py-3 bg-surface-hover/50 transition-colors hover:bg-surface-hover/80"
+                      onClick={() => toggleFolder(groupId)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Folder size={18} className="text-primary" />
+                        <span className="text-sm font-medium text-ink">{title}</span>
+                        <Badge label={`${groupAssets.length} asset(s)`} />
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {isExpanded ? <ChevronDown size={18} className="text-muted" /> : <ChevronRight size={18} className="text-muted" />}
+                      </div>
+                    </div>
+
+                    {isExpanded && groupAssets.length === 0 && (
+                      <p className="p-6 text-sm text-muted">No assets in this folder.</p>
+                    )}
+
+                    {isExpanded && groupAssets.length > 0 && (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                          <thead className="border-b border-border bg-surface-hover/30 text-xs uppercase tracking-wide text-muted">
+                            <tr>
+                              <th className="px-4 py-3 font-medium w-10">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
+                                  checked={allSelected}
+                                  onChange={() => toggleGroupAssets(groupAssets)}
+                                />
+                              </th>
+                              <th className="px-4 py-3 font-medium">Hostname</th>
+                              <th className="px-4 py-3 font-medium">IP Address</th>
+                              <th className="px-4 py-3 font-medium">MAC Address</th>
+                              <th className="px-4 py-3 font-medium">Type</th>
+                              <th className="px-4 py-3 font-medium">OS</th>
+                              <th className="px-4 py-3 font-medium">Status</th>
+                              <th className="px-4 py-3 font-medium">Risk Score</th>
+                              <th className="px-4 py-3 font-medium"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {groupAssets.map((asset) => (
+                              <tr key={asset.id} className="border-b border-border/60 hover:bg-surface-hover/40">
+                                <td className="px-4 py-3">
+                                  <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
+                                    checked={selectedAssetIds.has(asset.id)}
+                                    onChange={() => toggleAssetSelection(asset.id)}
+                                  />
+                                </td>
+                                <td className="px-4 py-3 font-medium text-ink">{asset.hostname}</td>
+                                <td className="px-4 py-3 text-ink/75">{asset.ip_address || "—"}</td>
+                                <td className="px-4 py-3 text-ink/75">{asset.mac_address || "—"}</td>
+                                <td className="px-4 py-3 capitalize text-ink/75">{asset.asset_type.replace(/_/g, " ")}</td>
+                                <td className="px-4 py-3 text-ink/75">{asset.operating_system || "—"}</td>
+                                <td className="px-4 py-3"><Badge label={asset.status} /></td>
+                                <td className="px-4 py-3">
+                                  <span className={asset.risk_score > 66 ? "text-critical" : asset.risk_score > 33 ? "text-medium" : "text-low"}>
+                                    {asset.risk_score.toFixed(0)}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <button
+                                    onClick={() => deleteAsset.mutate(asset.id)}
+                                    className="rounded-md p-1.5 text-muted hover:bg-critical/10 hover:text-critical"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </Card>
+                );
+              })}
+            </>
           )}
-        </Card>
+        </div>
       </main>
 
       <AssetFormModal

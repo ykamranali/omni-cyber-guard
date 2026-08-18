@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ShieldAlert, ExternalLink, Trash2 } from "lucide-react";
+import { ShieldAlert, ExternalLink, Trash2, Folder, ChevronDown, ChevronRight } from "lucide-react";
 
 import { Topbar } from "@/components/layout/topbar";
 import { Card } from "@/components/ui/card";
@@ -20,6 +20,7 @@ interface FindingOut {
   status: "open" | "in_progress" | "remediated" | "false_positive" | "accepted_risk";
   remediation_guidance: string;
   source: string;
+  scan_job_id: string | null;
 }
 
 const SEVERITY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
@@ -32,6 +33,7 @@ export default function VulnerabilitiesPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const [scanIdFilter, setScanIdFilter] = useState<string>("all");
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(["manual"]));
 
   const { data: scans } = useQuery({
     queryKey: ["scans"],
@@ -79,13 +81,25 @@ export default function VulnerabilitiesPage() {
     setSelectedFindingIds(newSet);
   };
 
-  const toggleAllFindings = () => {
-    if (!findings) return;
-    if (selectedFindingIds.size === findings.length) {
-      setSelectedFindingIds(new Set());
+  const toggleGroupFindings = (groupFindings: FindingOut[]) => {
+    if (!groupFindings || groupFindings.length === 0) return;
+    const groupFindingIds = groupFindings.map(f => f.id);
+    const allSelected = groupFindingIds.every(id => selectedFindingIds.has(id));
+    
+    const newSet = new Set(selectedFindingIds);
+    if (allSelected) {
+      groupFindingIds.forEach(id => newSet.delete(id));
     } else {
-      setSelectedFindingIds(new Set(findings.map(f => f.id)));
+      groupFindingIds.forEach(id => newSet.add(id));
     }
+    setSelectedFindingIds(newSet);
+  };
+
+  const toggleFolder = (folderId: string) => {
+    const newSet = new Set(expandedFolders);
+    if (newSet.has(folderId)) newSet.delete(folderId);
+    else newSet.add(folderId);
+    setExpandedFolders(newSet);
   };
 
   const filtered = useMemo(() => {
@@ -95,6 +109,24 @@ export default function VulnerabilitiesPage() {
       .filter((f) => statusFilter === "all" || f.status === statusFilter)
       .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
   }, [findings, severityFilter, statusFilter]);
+
+  const groupedFindings = useMemo(() => {
+    if (!filtered) return {};
+    const groups: Record<string, FindingOut[]> = { manual: [] };
+    
+    if (scans) {
+      scans.filter(s => s.status === "completed").forEach(s => {
+        groups[s.id] = [];
+      });
+    }
+
+    filtered.forEach(f => {
+      const key = f.scan_job_id || "manual";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(f);
+    });
+    return groups;
+  }, [filtered, scans]);
 
   return (
     <>
@@ -123,24 +155,11 @@ export default function VulnerabilitiesPage() {
             </label>
             <span className="text-xs text-muted">{filtered.length} finding(s)</span>
           </div>
-        </div>
 
-        <Card className="overflow-hidden p-0">
-          <div className="flex items-center justify-between border-b border-border px-5 py-3 bg-surface-hover/50">
-            <div className="flex items-center gap-3">
-              {findings && findings.length > 0 && (
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
-                  checked={selectedFindingIds.size === findings.length}
-                  onChange={toggleAllFindings}
-                />
-              )}
-              <span className="text-xs font-medium text-muted uppercase tracking-wide">Vulnerabilities</span>
-            </div>
+          <div className="flex gap-2">
             {selectedFindingIds.size > 0 && (
               <button
-                className="rounded border border-critical/50 bg-critical/10 px-2 py-1 text-xs uppercase tracking-wider text-critical hover:bg-critical/20"
+                className="rounded border border-critical/50 bg-critical/10 px-3 py-1.5 text-xs font-medium tracking-wide text-critical hover:bg-critical/20"
                 onClick={() => {
                   if (confirm(`Are you sure you want to delete ${selectedFindingIds.size} vulnerability(ies)?`)) {
                     deleteBulkFindings.mutate(Array.from(selectedFindingIds));
@@ -152,101 +171,150 @@ export default function VulnerabilitiesPage() {
               </button>
             )}
           </div>
+        </div>
 
-          {isLoading && <p className="p-6 text-sm text-muted">Loading findings…</p>}
-          {isError && <p className="p-6 text-sm text-critical">Unable to load findings from the API.</p>}
+        <div className="space-y-4">
+          {isLoading && <Card className="p-6"><p className="text-sm text-muted">Loading findings…</p></Card>}
+          {isError && <Card className="p-6"><p className="text-sm text-critical">Unable to load findings from the API.</p></Card>}
           {findings && findings.length === 0 && (
-            <p className="p-6 text-sm text-muted">
-              No findings yet. Findings appear here from manual entry, or automatically after a network scan detects a risky exposed service.
-            </p>
+            <Card className="p-6">
+              <p className="text-sm text-muted">No findings yet. Findings appear here from manual entry, or automatically after a network scan detects a risky exposed service.</p>
+            </Card>
           )}
 
           {filtered.length > 0 && (
-            <div className="divide-y divide-border/60">
-              {filtered.map((f) => (
-                <div key={f.id} className="p-4">
-                  <div className="flex items-start gap-4">
-                    <input
-                      type="checkbox"
-                      className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
-                      checked={selectedFindingIds.has(f.id)}
-                      onChange={() => toggleFindingSelection(f.id)}
-                    />
-                    <div className="flex-1">
-                      <div
-                        className="flex cursor-pointer items-start justify-between gap-4"
-                        onClick={() => setExpandedId(expandedId === f.id ? null : f.id)}
-                      >
-                        <div className="flex min-w-0 items-start gap-3">
-                          <ShieldAlert size={16} className="mt-0.5 shrink-0 text-high" />
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-ink">{f.title}</p>
-                            <p className="mt-0.5 text-xs text-muted">
-                              {f.cve_id ? `${f.cve_id} · ` : ""}
-                              {f.cvss_score != null ? `CVSS ${f.cvss_score} · ` : ""}
-                              Source: {f.source === "network_scan" ? "Network scan" : "Manual entry"}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <Badge label={f.severity} />
-                          <Badge label={f.status} />
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (confirm("Are you sure you want to delete this vulnerability?")) {
-                                deleteFinding.mutate(f.id);
-                              }
-                            }}
-                            disabled={deleteFinding.isPending}
-                            className="ml-2 rounded-md p-1 text-muted hover:bg-critical/10 hover:text-critical"
-                            title="Delete Vulnerability"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      </div>
+            <>
+              {Object.entries(groupedFindings).map(([groupId, groupFindings]) => {
+                const isManual = groupId === "manual";
+                const scan = scans?.find(s => s.id === groupId);
+                
+                if (!isManual && !scan) return null;
+                if (isManual && groupFindings.length === 0 && (scans?.filter(s => s.status === "completed").length || 0) > 0) return null;
 
-                  {expandedId === f.id && (
-                    <div className="ml-7 mt-3 space-y-3 rounded-lg bg-surface-hover/40 p-3 text-sm">
-                      <p className="text-ink/80">{f.description}</p>
-                      <div>
-                        <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">
-                          Remediation guidance
-                        </p>
-                        <p className="text-ink/75">{f.remediation_guidance || "No remediation guidance recorded."}</p>
+                const isExpanded = expandedFolders.has(groupId);
+                const title = isManual ? "Manual / Uncategorized Findings" : `Scan Folder: ${scan.target_cidr} (${new Date(scan.created_at).toLocaleDateString()})`;
+                const allSelected = groupFindings.length > 0 && groupFindings.every(f => selectedFindingIds.has(f.id));
+
+                return (
+                  <Card key={groupId} className="overflow-hidden p-0 transition-all">
+                    <div 
+                      className="flex cursor-pointer items-center justify-between border-b border-border px-5 py-3 bg-surface-hover/50 transition-colors hover:bg-surface-hover/80"
+                      onClick={() => toggleFolder(groupId)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Folder size={18} className="text-primary" />
+                        <span className="text-sm font-medium text-ink">{title}</span>
+                        <Badge label={`${groupFindings.length} finding(s)`} />
                       </div>
-                      {f.cve_id && (
-                        <a
-                          href={`https://nvd.nist.gov/vuln/detail/${f.cve_id}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex w-fit items-center gap-1 text-xs text-primary hover:underline"
-                        >
-                          View {f.cve_id} on NVD <ExternalLink size={11} />
-                        </a>
-                      )}
-                      <div className="flex items-center gap-2 pt-1">
-                        <span className="text-xs text-muted">Update status:</span>
-                        <select
-                          value={f.status}
-                          onChange={(e) => updateStatus.mutate({ id: f.id, status: e.target.value })}
-                          className="h-8 rounded-md border border-border bg-surface px-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-primary/40"
-                        >
-                          {STATUS_OPTIONS.map((s) => (
-                            <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
-                          ))}
-                        </select>
+                      <div className="flex items-center gap-3">
+                        {isExpanded ? <ChevronDown size={18} className="text-muted" /> : <ChevronRight size={18} className="text-muted" />}
                       </div>
                     </div>
-                  )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+
+                    {isExpanded && groupFindings.length === 0 && (
+                      <p className="p-6 text-sm text-muted">No vulnerabilities found in this scan.</p>
+                    )}
+
+                    {isExpanded && groupFindings.length > 0 && (
+                      <div className="divide-y divide-border/60">
+                        <div className="flex items-center gap-3 border-b border-border bg-surface-hover/30 px-5 py-2">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
+                            checked={allSelected}
+                            onChange={() => toggleGroupFindings(groupFindings)}
+                          />
+                          <span className="text-xs uppercase tracking-wide text-muted font-medium">Select All</span>
+                        </div>
+                        {groupFindings.map((f) => (
+                          <div key={f.id} className="p-4 hover:bg-surface-hover/40 transition-colors">
+                            <div className="flex items-start gap-4">
+                              <input
+                                type="checkbox"
+                                className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
+                                checked={selectedFindingIds.has(f.id)}
+                                onChange={() => toggleFindingSelection(f.id)}
+                              />
+                              <div className="flex-1">
+                                <div
+                                  className="flex cursor-pointer items-start justify-between gap-4"
+                                  onClick={() => setExpandedId(expandedId === f.id ? null : f.id)}
+                                >
+                                  <div className="flex min-w-0 items-start gap-3">
+                                    <ShieldAlert size={16} className="mt-0.5 shrink-0 text-high" />
+                                    <div className="min-w-0">
+                                      <p className="truncate text-sm font-medium text-ink">{f.title}</p>
+                                      <p className="mt-0.5 text-xs text-muted">
+                                        {f.cve_id ? `${f.cve_id} · ` : ""}
+                                        {f.cvss_score != null ? `CVSS ${f.cvss_score} · ` : ""}
+                                        Source: {f.source === "network_scan" ? "Network scan" : "Manual entry"}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex shrink-0 items-center gap-2">
+                                    <Badge label={f.severity} />
+                                    <Badge label={f.status} />
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (confirm("Are you sure you want to delete this vulnerability?")) {
+                                          deleteFinding.mutate(f.id);
+                                        }
+                                      }}
+                                      disabled={deleteFinding.isPending}
+                                      className="ml-2 rounded-md p-1.5 text-muted hover:bg-critical/10 hover:text-critical"
+                                      title="Delete Vulnerability"
+                                    >
+                                      <Trash2 size={15} />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {expandedId === f.id && (
+                                  <div className="ml-7 mt-3 space-y-3 rounded-lg bg-surface-hover/40 p-3 text-sm border border-border/50">
+                                    <p className="text-ink/80">{f.description}</p>
+                                    <div>
+                                      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">
+                                        Remediation guidance
+                                      </p>
+                                      <p className="text-ink/75">{f.remediation_guidance || "No remediation guidance recorded."}</p>
+                                    </div>
+                                    {f.cve_id && (
+                                      <a
+                                        href={`https://nvd.nist.gov/vuln/detail/${f.cve_id}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="flex w-fit items-center gap-1 text-xs text-primary hover:underline"
+                                      >
+                                        View {f.cve_id} on NVD <ExternalLink size={11} />
+                                      </a>
+                                    )}
+                                    <div className="flex items-center gap-2 pt-2 border-t border-border/50">
+                                      <span className="text-xs text-muted">Update status:</span>
+                                      <select
+                                        value={f.status}
+                                        onChange={(e) => updateStatus.mutate({ id: f.id, status: e.target.value })}
+                                        className="h-8 rounded-md border border-border bg-surface px-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-primary/40"
+                                      >
+                                        {STATUS_OPTIONS.map((s) => (
+                                          <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </Card>
+                );
+              })}
+            </>
           )}
-        </Card>
+        </div>
       </main>
     </>
   );

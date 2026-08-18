@@ -12,6 +12,15 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
 
+interface ScanScheduleOut {
+  id: string;
+  name: string;
+  target_cidr: string;
+  cron_expression: string;
+  is_active: boolean;
+  created_at: string;
+}
+
 interface ScanJobOut {
   id: string;
   target_cidr: string;
@@ -45,7 +54,33 @@ export default function ScanCenterPage() {
       (query.state.data || []).some((s) => s.status === "queued" || s.status === "running") ? 3000 : false,
   });
 
+  const { data: schedules, isLoading: isLoadingSchedules } = useQuery({
+    queryKey: ["schedules"],
+    queryFn: () => api.get<ScanScheduleOut[]>("/schedules"),
+  });
+
   const [selectedScanIds, setSelectedScanIds] = useState<Set<string>>(new Set());
+  
+  const [scheduleName, setScheduleName] = useState("");
+  const [scheduleCidr, setScheduleCidr] = useState("");
+  const [scheduleCron, setScheduleCron] = useState("0 2 * * *");
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+
+  const createSchedule = useMutation({
+    mutationFn: () => api.post<ScanScheduleOut>("/schedules", { name: scheduleName, target_cidr: scheduleCidr, cron_expression: scheduleCron }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      setScheduleError(null);
+      setScheduleName("");
+      setScheduleCidr("");
+    },
+    onError: (err) => setScheduleError(err instanceof ApiError ? err.message : "Failed to create schedule"),
+  });
+
+  const deleteSchedule = useMutation({
+    mutationFn: (id: string) => api.delete(`/schedules/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
+  });
   
   const startScan = useMutation({
     mutationFn: () => api.post<ScanJobOut>("/scans", { target_cidr: cidr }),
@@ -151,6 +186,85 @@ export default function ScanCenterPage() {
             <p className="mt-3 rounded-lg border border-critical/30 bg-critical/10 px-3 py-2 text-sm text-critical">
               {error}
             </p>
+          )}
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Radar size={18} className="text-primary" />
+              <CardTitle>Scheduled Scans (Recurring)</CardTitle>
+            </div>
+          </CardHeader>
+          <p className="mb-4 text-sm text-muted">
+            Configure automated, recurring scans using standard cron expressions (e.g. <code>0 2 * * *</code> for daily at 2 AM).
+          </p>
+
+          <form onSubmit={(e) => { e.preventDefault(); createSchedule.mutate(); }} className="flex flex-wrap items-end gap-3 mb-6">
+            <div className="min-w-[150px] flex-1">
+              <label className="mb-1 block text-xs text-muted">Schedule Name</label>
+              <Input
+                required
+                placeholder="Daily Subnet Scan"
+                value={scheduleName}
+                onChange={(e) => setScheduleName(e.target.value)}
+              />
+            </div>
+            <div className="min-w-[150px] flex-1">
+              <label className="mb-1 block text-xs text-muted">Target CIDR</label>
+              <Input
+                required
+                placeholder="192.168.1.0/24"
+                value={scheduleCidr}
+                onChange={(e) => setScheduleCidr(e.target.value)}
+              />
+            </div>
+            <div className="min-w-[120px] flex-1">
+              <label className="mb-1 block text-xs text-muted">Cron Expression</label>
+              <Input
+                required
+                placeholder="0 2 * * *"
+                value={scheduleCron}
+                onChange={(e) => setScheduleCron(e.target.value)}
+              />
+            </div>
+            <Button type="submit" disabled={createSchedule.isPending}>
+              {createSchedule.isPending ? "Saving…" : "Create Schedule"}
+            </Button>
+          </form>
+
+          {scheduleError && (
+            <p className="mb-4 rounded-lg border border-critical/30 bg-critical/10 px-3 py-2 text-sm text-critical">
+              {scheduleError}
+            </p>
+          )}
+
+          {schedules && schedules.length > 0 && (
+            <div className="divide-y divide-border/60 border-t border-border mt-4">
+              {schedules.map((s) => (
+                <div key={s.id} className="flex items-center justify-between py-3">
+                  <div>
+                    <p className="text-sm font-medium text-ink">{s.name}</p>
+                    <p className="text-xs text-muted">Target: {s.target_cidr} · Cron: <code>{s.cron_expression}</code></p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (confirm("Are you sure you want to delete this schedule?")) {
+                        deleteSchedule.mutate(s.id);
+                      }
+                    }}
+                    disabled={deleteSchedule.isPending}
+                    className="rounded-md p-1.5 text-muted hover:bg-critical/10 hover:text-critical"
+                    title="Delete Schedule"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {schedules && schedules.length === 0 && (
+            <p className="text-sm text-muted mt-2">No schedules created yet.</p>
           )}
         </Card>
 

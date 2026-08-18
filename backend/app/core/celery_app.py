@@ -11,7 +11,7 @@ celery_app = Celery(
     "omni_cyber_guard",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["app.tasks.scan_tasks"],
+    include=["app.tasks.scan_tasks", "app.tasks.scheduler_tasks"],
 )
 
 celery_app.conf.update(
@@ -23,3 +23,13 @@ celery_app.conf.update(
     task_track_started=True,
     worker_prefetch_multiplier=1,
 )
+
+from celery.schedules import crontab
+
+celery_app.conf.beat_schedule = {
+    "check-scan-schedules-every-minute": {
+        "task": "scheduler_tasks.check_schedules",
+        "schedule": crontab(minute="*"),  # Run every minute
+    },
+}
+

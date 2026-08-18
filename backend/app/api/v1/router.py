@@ -17,6 +17,7 @@ from app.api.v1.endpoints import (
     incidents,
     infrastructure,
     intelligence,
+    schedules,
 )
 
 api_router = APIRouter()
@@ -36,3 +37,4 @@ api_router.include_router(agent.router)
 api_router.include_router(incidents.router)
 api_router.include_router(infrastructure.router)
 api_router.include_router(intelligence.router)
+api_router.include_router(schedules.router, prefix="/schedules", tags=["schedules"])
