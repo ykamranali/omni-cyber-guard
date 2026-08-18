@@ -35,5 +35,6 @@ class Incident(Base, TimestampMixin):
     asset_id = Column(UUID(as_uuid=True), ForeignKey("assets.id"), nullable=True)
     assigned_to = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     
+    ai_playbook = Column(Text, nullable=True)
     resolution_notes = Column(Text, nullable=True)
     resolved_at = Column(DateTime(timezone=True), nullable=True)

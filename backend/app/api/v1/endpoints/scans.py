@@ -51,6 +51,7 @@ def create_scan(
         initiated_by_user_id=current_user.id,
         target_cidr=payload.target_cidr,
         scan_type=ScanType.PORT_SERVICE_SCAN,
+        engine=payload.engine,
         status=ScanStatus.QUEUED,
     )
     db.add(job)

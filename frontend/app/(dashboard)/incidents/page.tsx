@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { IncidentDrawer } from "@/components/incidents/incident-drawer";
 
 interface Incident {
   id: string;
@@ -27,6 +28,7 @@ const COLUMNS = [
 
 export default function IncidentsPage() {
   const queryClient = useQueryClient();
+  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
 
   const { data: incidents, isLoading } = useQuery({
     queryKey: ["incidents"],
@@ -73,7 +75,11 @@ export default function IncidentsPage() {
                     <div className="text-center text-muted text-xs p-8 opacity-50 border border-dashed border-border rounded-xl">No active incidents here.</div>
                   )}
                   {colIncidents.map(incident => (
-                    <div key={incident.id} className="hud-panel p-4 flex flex-col gap-3 group relative hover:border-primary/50 transition-colors">
+                    <div 
+                      key={incident.id} 
+                      onClick={() => setSelectedIncident(incident)}
+                      className="hud-panel p-4 flex flex-col gap-3 group relative hover:border-primary/50 transition-colors cursor-pointer"
+                    >
                       <div className="flex justify-between items-start">
                         <div className="flex items-center gap-2">
                           {incident.severity === "critical" ? <AlertTriangle size={16} className="text-red-500 animate-pulse" /> : 
@@ -99,14 +105,14 @@ export default function IncidentsPage() {
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           {col.id !== "open" && (
                             <button 
-                              onClick={() => updateStatus.mutate({ id: incident.id, status: col.id === "resolved" ? "investigating" : "open" })}
+                              onClick={(e) => { e.stopPropagation(); updateStatus.mutate({ id: incident.id, status: col.id === "resolved" ? "investigating" : "open" }); }}
                               className="p-1 hover:bg-surface-hover rounded text-muted hover:text-ink"
                               title="Move Back"
                             ><ArrowLeft size={14} /></button>
                           )}
                           {col.id !== "resolved" && (
                             <button 
-                              onClick={() => updateStatus.mutate({ id: incident.id, status: col.id === "open" ? "investigating" : "resolved" })}
+                              onClick={(e) => { e.stopPropagation(); updateStatus.mutate({ id: incident.id, status: col.id === "open" ? "investigating" : "resolved" }); }}
                               className="p-1 hover:bg-surface-hover rounded text-muted hover:text-primary"
                               title="Advance Status"
                             ><ArrowRight size={14} /></button>
@@ -121,6 +127,13 @@ export default function IncidentsPage() {
           })}
         </div>
       </main>
+
+      {selectedIncident && (
+        <IncidentDrawer 
+          incident={incidents?.find((i) => i.id === selectedIncident.id) || selectedIncident} 
+          onClose={() => setSelectedIncident(null)} 
+        />
+      )}
     </>
   );
 }

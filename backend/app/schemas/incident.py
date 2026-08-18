@@ -26,6 +26,7 @@ class IncidentOut(IncidentBase):
     status: IncidentStatus
     asset_id: Optional[uuid.UUID] = None
     assigned_to: Optional[uuid.UUID] = None
+    ai_playbook: Optional[str] = None
     resolution_notes: Optional[str] = None
     resolved_at: Optional[datetime] = None
     created_at: datetime
