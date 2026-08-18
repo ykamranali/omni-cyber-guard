@@ -33,9 +33,9 @@ export default function IntelligencePage() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-3">
-          <div className="rounded-xl border border-border bg-surface p-6 shadow-sm col-span-2">
-            <h3 className="font-semibold text-ink flex items-center gap-2 mb-4">
-              <BrainCircuit className="text-primary h-5 w-5" /> Heuristic Insights Engine
+          <div className="jarvis-panel p-6 col-span-2">
+            <h3 className="font-semibold text-primary neon-text flex items-center gap-2 mb-4 text-lg">
+              <BrainCircuit className="text-primary h-6 w-6 animate-pulse-glow" /> Heuristic Insights Engine
             </h3>
             <div className="space-y-4">
               {isLoading ? (
@@ -44,11 +44,11 @@ export default function IntelligencePage() {
                 <div className="text-muted p-8 text-center">No insights available at this time.</div>
               ) : (
                 insights.map((insight) => (
-                  <div key={insight.id} className="p-4 rounded-lg border border-border bg-surface-hover/50 flex gap-4">
-                    <div className="mt-1 flex-shrink-0">
-                      {insight.type === "critical" ? <AlertTriangle className="h-6 w-6 text-red-500" /> :
-                       insight.type === "warning" ? <Activity className="h-6 w-6 text-orange-500" /> :
-                       <ShieldCheck className="h-6 w-6 text-blue-500" />}
+                  <div key={insight.id} className="p-4 rounded-xl border border-primary/20 bg-surface/50 backdrop-blur-sm flex gap-4 hover:border-primary/50 transition-colors shadow-glass">
+                    <div className="mt-1 flex-shrink-0 glossy-icon p-2 border-current shadow-neon">
+                      {insight.type === "critical" ? <AlertTriangle className="h-6 w-6 text-red-500 animate-pulse-glow" /> :
+                       insight.type === "warning" ? <Activity className="h-6 w-6 text-orange-500 animate-pulse-glow" /> :
+                       <ShieldCheck className="h-6 w-6 text-blue-500 animate-pulse-glow" />}
                     </div>
                     <div className="flex-1">
                       <div className="flex justify-between items-start">
@@ -73,11 +73,11 @@ export default function IntelligencePage() {
           </div>
 
           <div className="space-y-6">
-            <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-              <h3 className="font-semibold text-ink flex items-center gap-2 mb-2">
-                <Crosshair className="text-red-500 h-5 w-5" /> Top Targeted Assets
+            <div className="jarvis-panel p-6">
+              <h3 className="font-semibold text-red-500 neon-text-critical flex items-center gap-2 mb-2 text-lg">
+                <Crosshair className="text-red-500 h-6 w-6 animate-pulse-glow" /> Top Targeted Assets
               </h3>
-              <p className="text-xs text-muted mb-4">Assets with the highest combination of severity and active network probing.</p>
+              <p className="text-xs text-muted mb-4 uppercase tracking-widest font-bold">Assets with the highest combination of severity and active network probing.</p>
               
               <div className="space-y-3">
                 {targetedAssets.length === 0 ? (
@@ -93,11 +93,12 @@ export default function IntelligencePage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-border bg-gradient-to-br from-primary/10 to-transparent p-6 shadow-sm border-primary/20">
-               <h3 className="font-semibold text-primary mb-2">Engine Status</h3>
-               <p className="text-sm text-ink/80">The Heuristic Engine is currently running and actively correlating live network events against open asset vulnerabilities.</p>
-               <div className="mt-4 flex items-center gap-2 text-xs font-semibold text-green-500 bg-green-500/10 px-3 py-1.5 rounded-md w-fit">
-                 <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+            <div className="jarvis-panel border-primary shadow-neon p-6 relative overflow-hidden">
+               <div className="absolute inset-0 bg-primary/20 h-full w-full animate-hud-scan opacity-20 pointer-events-none" />
+               <h3 className="font-bold text-primary neon-text mb-2 text-lg relative z-10">Engine Status</h3>
+               <p className="text-sm text-ink/80 relative z-10">The Heuristic Engine is currently running and actively correlating live network events against open asset vulnerabilities.</p>
+               <div className="mt-4 flex items-center gap-2 text-xs font-bold text-green-500 bg-green-500/10 px-3 py-1.5 rounded-md w-fit border border-green-500/50 shadow-[0_0_10px_#22C55E] relative z-10 tracking-wider">
+                 <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse-glow shadow-[0_0_5px_#22C55E]" />
                  FULLY OPERATIONAL
                </div>
             </div>

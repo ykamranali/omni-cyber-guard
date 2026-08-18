@@ -32,10 +32,27 @@ const config: Config = {
       backdropBlur: { xs: "2px" },
       boxShadow: {
         glass: "0 8px 32px 0 rgba(0, 0, 0, 0.37)",
+        neon: "0 0 10px rgb(var(--color-primary)), 0 0 20px rgb(var(--color-primary))",
+        "neon-critical": "0 0 10px #EF4444, 0 0 20px #EF4444",
       },
       borderRadius: {
         xl: "1rem",
         "2xl": "1.25rem",
+      },
+      animation: {
+        "spin-slow": "spin 8s linear infinite",
+        "pulse-glow": "pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+        "hud-scan": "hud-scan 3s ease-in-out infinite alternate",
+      },
+      keyframes: {
+        "pulse-glow": {
+          "0%, 100%": { opacity: "1", transform: "scale(1)", filter: "brightness(1)" },
+          "50%": { opacity: ".8", transform: "scale(1.05)", filter: "brightness(1.5)" },
+        },
+        "hud-scan": {
+          "0%": { transform: "translateY(-100%)" },
+          "100%": { transform: "translateY(100%)" },
+        },
       },
     },
   },

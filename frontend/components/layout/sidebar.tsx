@@ -54,12 +54,13 @@ export function Sidebar() {
 
   return (
     <aside className="hidden w-64 flex-col border-r border-border bg-surface/40 backdrop-blur-xl md:flex">
-      <div className="flex h-16 items-center gap-2 border-b border-border px-5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-secondary">
-          <ShieldCheck className="h-4 w-4 text-white" />
+      <div className="flex h-20 items-center gap-3 border-b border-primary/20 bg-surface/20 px-5 shadow-[0_4px_20px_rgba(var(--color-primary)/0.1)] relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(var(--color-primary)/0.15),transparent_70%)] pointer-events-none" />
+        <div className="glossy-icon h-10 w-10 rounded-xl border border-primary/40 text-primary shadow-neon z-10">
+          <ShieldCheck className="h-6 w-6" />
         </div>
-        <div>
-          <p className="text-sm font-semibold leading-none text-ink">Omni Cyber Guard</p>
+        <div className="z-10">
+          <p className="text-[15px] font-bold tracking-wider text-ink neon-text uppercase">Omni Cyber Guard</p>
         </div>
       </div>
 
@@ -90,14 +91,16 @@ export function Sidebar() {
               key={href}
               href={href}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-300 group",
                 active
-                  ? "bg-primary/15 text-primary border border-primary/30"
-                  : "text-ink/75 hover:bg-surface-hover hover:text-ink"
+                  ? "bg-primary/10 text-primary border border-primary/30 shadow-[inset_0_0_10px_rgba(var(--color-primary)/0.2)]"
+                  : "text-ink/75 hover:bg-surface-hover hover:text-ink hover:translate-x-1"
               )}
             >
-              <Icon size={17} />
-              {label}
+              <div className={cn("p-1.5 rounded-lg transition-all duration-300", active ? "glossy-icon border border-primary/50" : "bg-surface group-hover:glossy-icon")}>
+                <Icon size={16} className={cn(active && "animate-pulse-glow")} />
+              </div>
+              <span className={cn("tracking-wide", active && "neon-text font-semibold")}>{label}</span>
             </Link>
           );
         })}

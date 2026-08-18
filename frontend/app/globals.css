@@ -47,6 +47,23 @@ html.light {
   .glass-card {
     @apply bg-surface/50 backdrop-blur-md border border-border/60 rounded-xl shadow-glass;
   }
+  .jarvis-panel {
+    @apply bg-surface/40 backdrop-blur-md border border-primary/40 shadow-neon rounded-2xl relative overflow-hidden transition-all duration-300;
+  }
+  .jarvis-panel::before {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-50 pointer-events-none;
+  }
+  .glossy-icon {
+    @apply relative flex items-center justify-center bg-gradient-to-br from-surface-hover to-surface border border-border/50 shadow-glass transition-transform duration-300 hover:scale-110 hover:-translate-y-1;
+    backdrop-filter: blur(10px);
+  }
+  .neon-text {
+    text-shadow: 0 0 5px rgb(var(--color-primary) / 0.8), 0 0 10px rgb(var(--color-primary) / 0.5);
+  }
+  .neon-text-critical {
+    text-shadow: 0 0 5px rgba(239, 68, 68, 0.8), 0 0 10px rgba(239, 68, 68, 0.5);
+  }
 }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }

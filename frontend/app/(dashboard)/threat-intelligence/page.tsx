@@ -60,50 +60,51 @@ export default function ThreatIntelligencePage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-xl border border-border bg-surface p-5">
-            <div className="flex items-center gap-3">
-              <div className={cn("rounded-lg p-2", data?.global_risk_level === "ELEVATED" ? "bg-red-500/10" : "bg-primary/10")}>
-                <Activity className={cn("h-5 w-5", data?.global_risk_level === "ELEVATED" ? "text-red-500" : "text-primary")} />
+          <div className="jarvis-panel p-5 group">
+            <div className="flex items-center gap-4">
+              <div className={cn("glossy-icon p-3 rounded-xl border border-current shadow-neon transition-transform group-hover:scale-110", data?.global_risk_level === "ELEVATED" ? "text-red-500" : "text-primary")}>
+                <Activity className={cn("h-6 w-6 animate-pulse-glow")} />
               </div>
               <div>
-                <p className="text-sm font-medium text-muted">Network Risk Level</p>
-                <h2 className={cn("text-2xl font-bold", data?.global_risk_level === "ELEVATED" ? "text-red-500" : "text-primary")}>
+                <p className="text-[10px] uppercase tracking-widest font-bold text-muted">Network Risk Level</p>
+                <h2 className={cn("text-3xl font-bold tracking-tight neon-text", data?.global_risk_level === "ELEVATED" ? "text-red-500" : "text-primary")}>
                   {data?.global_risk_level || "UNKNOWN"}
                 </h2>
               </div>
             </div>
           </div>
-          <div className="rounded-xl border border-border bg-surface p-5">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-primary/10 p-2">
-                <ShieldAlert className="h-5 w-5 text-primary" />
+          <div className="jarvis-panel p-5 group">
+            <div className="flex items-center gap-4">
+              <div className="glossy-icon p-3 rounded-xl border border-primary text-primary shadow-neon transition-transform group-hover:scale-110">
+                <ShieldAlert className="h-6 w-6 animate-pulse-glow" />
               </div>
               <div>
-                <p className="text-sm font-medium text-muted">Events Detected (Last 60s)</p>
-                <h2 className="text-2xl font-bold text-ink">{data?.active_campaigns || 0}</h2>
+                <p className="text-[10px] uppercase tracking-widest font-bold text-muted">Events Detected (Last 60s)</p>
+                <h2 className="text-3xl font-bold tracking-tight neon-text text-primary">{data?.active_campaigns || 0}</h2>
               </div>
             </div>
           </div>
-          <div className="rounded-xl border border-border bg-surface p-5">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-purple-500/10 p-2">
-                <Satellite className="h-5 w-5 text-purple-500" />
+          <div className="jarvis-panel p-5 group">
+            <div className="flex items-center gap-4">
+              <div className="glossy-icon p-3 rounded-xl border border-purple-500 text-purple-500 shadow-[0_0_15px_#A855F7] transition-transform group-hover:scale-110">
+                <Satellite className="h-6 w-6 animate-spin-slow" />
               </div>
               <div>
-                <p className="text-sm font-medium text-muted">Zero-Days Tracked</p>
-                <h2 className="text-2xl font-bold text-ink">{data?.zero_days_tracked || 0}</h2>
+                <p className="text-[10px] uppercase tracking-widest font-bold text-muted">Zero-Days Tracked</p>
+                <h2 className="text-3xl font-bold tracking-tight neon-text text-purple-500">{data?.zero_days_tracked || 0}</h2>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="rounded-xl border border-border bg-surface">
-          <div className="border-b border-border p-4">
+        <div className="jarvis-panel border-primary/50 relative">
+          <div className="absolute inset-0 bg-primary h-1 w-full animate-hud-scan opacity-50 shadow-neon pointer-events-none" />
+          <div className="border-b border-primary/20 bg-surface/40 backdrop-blur p-4 relative z-10">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-semibold text-ink">Real-Time Threat Feed</h2>
-                <div className="flex items-center gap-1.5 text-xs text-primary animate-pulse ml-2 border border-primary/20 bg-primary/10 px-2 py-0.5 rounded-full">
-                  <span className="h-1.5 w-1.5 rounded-full bg-primary" /> LIVE
+                <h2 className="text-lg font-bold text-ink neon-text">Real-Time Threat Feed</h2>
+                <div className="flex items-center gap-1.5 text-xs text-primary animate-pulse ml-2 border border-primary shadow-neon bg-primary/10 px-2 py-0.5 rounded-full uppercase tracking-wider font-bold">
+                  <span className="h-2 w-2 rounded-full bg-primary shadow-neon" /> LIVE
                 </div>
               </div>
               <div className="relative">
@@ -118,9 +119,9 @@ export default function ThreatIntelligencePage() {
               </div>
             </div>
           </div>
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-primary/10 relative z-10">
             {filteredAdvisories?.map((advisory) => (
-              <div key={advisory.id} className="flex gap-4 p-5 hover:bg-surface-hover/50 transition-colors">
+              <div key={advisory.id} className="flex gap-4 p-5 hover:bg-primary/5 transition-colors group">
                 <div className="mt-1 flex-shrink-0">
                   {advisory.severity === "CRITICAL" ? (
                     <AlertTriangle className="h-6 w-6 text-red-500" />

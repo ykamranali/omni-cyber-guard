@@ -112,19 +112,19 @@ export default function DashboardPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <Card className="flex items-center justify-around gap-4 lg:col-span-1">
+              <Card className="jarvis-panel flex items-center justify-around gap-4 lg:col-span-1">
                 <ScoreRing score={summary.security_score} label="Security Score" colorClass="#0EA5E9" />
                 <ScoreRing score={summary.risk_score} label="Risk Score" colorClass="#EF4444" />
               </Card>
 
-              <Card className="flex flex-col lg:col-span-1">
+              <Card className="jarvis-panel flex flex-col lg:col-span-1">
                 <CardHeader><CardTitle>Network Overview</CardTitle></CardHeader>
                 <div className="flex-1">
                   <HeroOrb />
                 </div>
               </Card>
 
-              <Card className="lg:col-span-1">
+              <Card className="jarvis-panel lg:col-span-1">
                 <CardHeader>
                   <CardTitle>Top Risky Assets</CardTitle>
                   <Link href="/assets" className="flex items-center gap-1 text-xs text-primary hover:underline">
@@ -152,50 +152,50 @@ export default function DashboardPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <Card className="lg:col-span-2">
+              <Card className="jarvis-panel lg:col-span-2">
                 <CardHeader><CardTitle>Findings by Severity</CardTitle></CardHeader>
                 <SeverityDonut data={severityData} />
               </Card>
-              <Card>
+              <Card className="jarvis-panel">
                 <CardHeader><CardTitle>Recent Scans</CardTitle></CardHeader>
                 <RecentScans scans={scans || []} />
               </Card>
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <Card className="lg:col-span-2">
+              <Card className="jarvis-panel lg:col-span-2">
                 <CardHeader>
                   <CardTitle>Geographic Asset Distribution</CardTitle>
                 </CardHeader>
                 <GeoAssetMap assets={geoAssets || []} />
               </Card>
-              <Card>
+              <Card className="jarvis-panel">
                 <CardHeader><CardTitle>Risk Trend (Last 7 Days)</CardTitle></CardHeader>
                 <RiskTrendChart data={trend || []} />
               </Card>
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <Card>
+              <Card className="jarvis-panel">
                 <CardHeader><CardTitle>Remediation Progress</CardTitle></CardHeader>
-                <div className="mb-2 h-3 w-full overflow-hidden rounded-full bg-surface-hover">
+                <div className="mb-2 h-3 w-full overflow-hidden rounded-full bg-surface-hover border border-primary/20">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-primary to-secondary"
+                    className="h-full rounded-full bg-gradient-to-r from-primary to-secondary shadow-neon"
                     style={{ width: `${summary.remediation_progress_percent}%` }}
                   />
                 </div>
-                <p className="text-sm text-muted">{summary.remediation_progress_percent}% of all findings remediated</p>
+                <p className="text-sm font-semibold neon-text text-primary">{summary.remediation_progress_percent}% <span className="text-muted font-normal">of all findings remediated</span></p>
               </Card>
 
-              <Card className="lg:col-span-2">
+              <Card className="jarvis-panel lg:col-span-2">
                 <CardHeader><CardTitle>Compliance Overview</CardTitle></CardHeader>
                 <ComplianceRings status={summary.compliance_status} />
               </Card>
             </div>
 
             {systemStatus && (
-              <Card>
-                <CardHeader><CardTitle>System Status</CardTitle></CardHeader>
+              <Card className="jarvis-panel border-primary/50 shadow-neon">
+                <CardHeader><CardTitle className="neon-text text-primary flex items-center gap-2"><div className="h-2 w-2 bg-primary rounded-full animate-pulse-glow"/> System Status</CardTitle></CardHeader>
                 <SystemStatusWidget overallStatus={systemStatus.overall_status} components={systemStatus.components} />
               </Card>
             )}
@@ -218,14 +218,14 @@ function StatCard({
   accent: string;
 }) {
   return (
-    <Card>
-      <div className="flex items-center gap-3">
-        <div className={`rounded-lg bg-surface-hover p-2 ${accent}`}>
-          <Icon size={18} />
+    <Card className="jarvis-panel relative group hover:border-primary/80 transition-colors">
+      <div className="flex items-center gap-4">
+        <div className={`glossy-icon p-3 rounded-xl border border-current shadow-neon transition-transform group-hover:scale-110 ${accent}`}>
+          <Icon size={22} className="animate-pulse-glow" />
         </div>
         <div>
-          <p className="text-xl font-semibold text-ink">{value}</p>
-          <p className="text-xs text-muted">{label}</p>
+          <p className={`text-3xl font-bold tracking-tight neon-text ${accent}`}>{value}</p>
+          <p className="text-[10px] tracking-widest uppercase text-muted font-bold mt-1">{label}</p>
         </div>
       </div>
     </Card>
