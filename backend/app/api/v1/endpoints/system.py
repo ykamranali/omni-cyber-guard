@@ -51,17 +51,27 @@ def system_status(
 
 @router.get("/network-info", response_model=NetworkInfoOut)
 def get_network_info(request: Request, current_user: User = Depends(get_current_active_user)):
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(('10.255.255.255', 1))
-        local_ip = s.getsockname()[0]
-    except Exception:
-        local_ip = '127.0.0.1'
-    finally:
-        s.close()
+    if settings.OVERRIDE_LOCAL_IP:
+        local_ip = settings.OVERRIDE_LOCAL_IP
+    else:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(('10.255.255.255', 1))
+            local_ip = s.getsockname()[0]
+        except Exception:
+            local_ip = '127.0.0.1'
+        finally:
+            s.close()
     
+    # Try to get the real client IP if behind a proxy
+    client_ip = request.headers.get("X-Forwarded-For")
+    if not client_ip:
+        client_ip = request.client.host if request.client else "unknown"
+    else:
+        client_ip = client_ip.split(",")[0].strip()
+        
     return NetworkInfoOut(
-        client_ip=request.client.host if request.client else "unknown",
+        client_ip=client_ip,
         server_local_ip=local_ip
     )
 

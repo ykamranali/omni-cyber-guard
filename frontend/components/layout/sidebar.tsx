@@ -90,16 +90,17 @@ export function Sidebar() {
               key={href}
               href={href}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-300 group",
+                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-300 group relative overflow-hidden",
                 active
-                  ? "bg-primary/10 text-primary border border-primary/30 shadow-[inset_0_0_10px_rgba(var(--color-primary)/0.2)]"
-                  : "text-ink/75 hover:bg-surface-hover hover:text-ink hover:translate-x-1"
+                  ? "bg-primary/15 text-primary border border-primary/50 shadow-[inset_0_0_20px_rgba(var(--color-primary)/0.3)] neon-pulse-border"
+                  : "text-ink/75 hover:bg-surface-hover hover:text-ink hover:translate-x-1 hover:shadow-[inset_0_0_10px_rgba(255,255,255,0.05)]"
               )}
             >
-              <div className={cn("p-1.5 rounded-lg transition-all duration-300", active ? "glossy-icon border border-primary/50" : "bg-surface group-hover:glossy-icon")}>
-                <Icon size={16} className={cn(active && "animate-pulse-glow")} />
+              {active && <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-transparent pointer-events-none" />}
+              <div className={cn("p-1.5 rounded-lg transition-all duration-300 z-10", active ? "glossy-icon border border-primary shadow-[0_0_10px_rgba(var(--color-primary)/0.5)]" : "bg-surface group-hover:glossy-icon group-hover:shadow-[0_0_10px_rgba(255,255,255,0.1)]")}>
+                <Icon size={16} className={cn(active && "animate-pulse drop-shadow-md")} />
               </div>
-              <span className={cn("tracking-wide", active && "neon-text font-semibold")}>{label}</span>
+              <span className={cn("tracking-wide z-10", active && "neon-text font-bold")}>{label}</span>
             </Link>
           );
         })}

@@ -38,6 +38,7 @@ services:
     environment:
       DATABASE_URL: postgresql://ocg_user:ocg_password@postgres:5432/omni_cyber_guard
       REDIS_URL: redis://redis:6379/0
+      OVERRIDE_LOCAL_IP: ${OVERRIDE_LOCAL_IP:-}
     ports:
       - "8000:8000"
     depends_on:
@@ -61,6 +62,7 @@ services:
     environment:
       DATABASE_URL: postgresql://ocg_user:ocg_password@postgres:5432/omni_cyber_guard
       REDIS_URL: redis://redis:6379/0
+      OVERRIDE_LOCAL_IP: ${OVERRIDE_LOCAL_IP:-}
     depends_on:
       postgres:
         condition: service_healthy

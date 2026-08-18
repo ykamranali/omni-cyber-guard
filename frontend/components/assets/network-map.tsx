@@ -39,7 +39,14 @@ function AssetNode({ asset, position, onClick }: { asset: Asset; position: [numb
         onClick={() => onClick(asset)}
       >
         <icosahedronGeometry args={[0.5, 1]} />
-        <meshStandardMaterial color={color} wireframe={hovered} />
+        <meshStandardMaterial 
+          color={color} 
+          emissive={color} 
+          emissiveIntensity={hovered ? 0.8 : 0.3} 
+          wireframe={hovered} 
+          transparent 
+          opacity={0.9} 
+        />
       </mesh>
       
       {/* Label */}
@@ -66,7 +73,7 @@ function CoreRouter() {
     <group position={[0, 0, 0]}>
       <mesh ref={meshRef}>
         <boxGeometry args={[1.5, 0.5, 1.5]} />
-        <meshStandardMaterial color="#3b82f6" roughness={0.2} metalness={0.8} />
+        <meshStandardMaterial color="#0ea5e9" emissive="#0ea5e9" emissiveIntensity={0.5} roughness={0.2} metalness={0.8} />
       </mesh>
       <Html position={[0, -0.8, 0]} center className="pointer-events-none">
         <div className="bg-primary text-white text-xs px-2 py-1 rounded shadow-lg whitespace-nowrap">
@@ -94,11 +101,16 @@ export function NetworkMap({ assets }: NetworkMapProps) {
   }, [assets]);
 
   return (
-    <div className="relative h-full w-full rounded-xl overflow-hidden bg-[#0f172a]">
+    <div className="relative h-full w-full rounded-xl overflow-hidden bg-[#090e17] border border-border/50 shadow-glass">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(14,165,233,0.1)_0%,transparent_60%)] pointer-events-none" />
       <Canvas camera={{ position: [0, 8, 12], fov: 45 }}>
+        <fog attach="fog" args={['#090e17', 5, 25]} />
         <ambientLight intensity={0.5} />
-        <pointLight position={[10, 10, 10]} intensity={1} />
-        <pointLight position={[-10, -10, -10]} intensity={0.5} color="#3b82f6" />
+        <pointLight position={[10, 10, 10]} intensity={1} color="#0ea5e9" />
+        <pointLight position={[-10, -10, -10]} intensity={0.5} color="#8b5cf6" />
+        
+        {/* Radar grid floor */}
+        <gridHelper args={[30, 30, '#0ea5e9', '#334155']} position={[0, -2, 0]} />
         
         <CoreRouter />
         

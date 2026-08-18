@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     FIRST_SUPERADMIN_PASSWORD: str = "ChangeMe!12345"
 
     RATE_LIMIT_PER_MINUTE: int = 120
+    OVERRIDE_LOCAL_IP: str | None = None
 
 
 settings = Settings()
