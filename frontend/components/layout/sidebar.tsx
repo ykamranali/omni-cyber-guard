@@ -12,7 +12,6 @@ import { useAuthStore } from "@/store/auth";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, enabled: true },
   { href: "/ask-agent", label: "Ask Omni Agent", icon: BrainCircuit, enabled: true },
-  { href: "/network", label: "Network Map", icon: Radar, enabled: true },
   { href: "/assets", label: "Assets", icon: Server, enabled: true },
   { href: "/scans", label: "Scan Center", icon: Radar, enabled: true, requires: "scans" as const },
   { href: "/vulnerabilities", label: "Vulnerabilities", icon: ShieldAlert, enabled: true },

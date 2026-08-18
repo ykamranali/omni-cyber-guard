@@ -40,9 +40,12 @@ const config: Config = {
         "2xl": "1.25rem",
       },
       animation: {
-        "spin-slow": "spin 8s linear infinite",
-        "pulse-glow": "pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-        "hud-scan": "hud-scan 3s ease-in-out infinite alternate",
+        "satellite-beam": "satellite-beam 3s linear infinite",
+        "cyber-lines": "cyber-lines 15s linear infinite",
+        "network-lightning": "network-lightning 8s ease-in-out infinite alternate",
+        "energy-wave": "energy-wave 8s linear infinite",
+        "float-particle": "float-particle 5s ease-in-out infinite alternate",
+        "circuit-trace": "circuit-trace 2s linear forwards",
       },
       keyframes: {
         "pulse-glow": {
@@ -52,6 +55,34 @@ const config: Config = {
         "hud-scan": {
           "0%": { transform: "translateY(-100%)" },
           "100%": { transform: "translateY(100%)" },
+        },
+        "satellite-beam": {
+          "0%": { transform: "translateY(-100%) scaleY(0.5)", opacity: "0" },
+          "50%": { transform: "translateY(0%) scaleY(1)", opacity: "0.8" },
+          "100%": { transform: "translateY(100%) scaleY(0.5)", opacity: "0" },
+        },
+        "cyber-lines": {
+          "0%": { backgroundPosition: "0 0" },
+          "100%": { backgroundPosition: "100px 100px" },
+        },
+        "network-lightning": {
+          "0%, 100%": { filter: "hue-rotate(0deg) brightness(1)", opacity: "0.6" },
+          "25%": { filter: "hue-rotate(90deg) brightness(1.8)", opacity: "1", textShadow: "0 0 20px #EAB308" },
+          "50%": { filter: "hue-rotate(180deg) brightness(1.2)", opacity: "0.8", textShadow: "0 0 20px #22C55E" },
+          "75%": { filter: "hue-rotate(270deg) brightness(1.8)", opacity: "1", textShadow: "0 0 20px #EF4444" },
+        },
+        "energy-wave": {
+          "0%": { transform: "translateX(-100%) skewX(-15deg)" },
+          "100%": { transform: "translateX(100vw) skewX(-15deg)" },
+        },
+        "float-particle": {
+          "0%": { transform: "translateY(0) scale(1)", opacity: "0.2" },
+          "50%": { transform: "translateY(-20px) scale(1.2)", opacity: "1" },
+          "100%": { transform: "translateY(10px) scale(0.8)", opacity: "0.2" },
+        },
+        "circuit-trace": {
+          "0%": { strokeDashoffset: "100%" },
+          "100%": { strokeDashoffset: "0" },
         },
       },
     },

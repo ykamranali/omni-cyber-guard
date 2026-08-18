@@ -167,9 +167,34 @@ def run_discovery_and_service_scan(
             os.remove(xml_path)
 
 
+import platform
+
+def get_arp_table() -> dict[str, str]:
+    arp_map = {}
+    try:
+        import subprocess
+        import re
+        if platform.system() == "Windows":
+            output = subprocess.check_output(["arp", "-a"], text=True)
+            for line in output.splitlines():
+                match = re.search(r"^\s*([0-9\.]+)\s+([0-9a-fA-F\-]+)\s+", line)
+                if match:
+                    arp_map[match.group(1)] = match.group(2).replace('-', ':').upper()
+        else:
+            output = subprocess.check_output(["arp", "-an"], text=True)
+            for line in output.splitlines():
+                match = re.search(r"\(([0-9\.]+)\) at ([0-9a-fA-F\:]+)", line)
+                if match:
+                    arp_map[match.group(1)] = match.group(2).upper()
+    except Exception:
+        pass
+    return arp_map
+
 def _parse_nmap_xml(xml_text: str) -> list[ScannedHost]:
     hosts: list[ScannedHost] = []
     root = ET.fromstring(xml_text)
+    
+    arp_table = get_arp_table()
 
     for host_el in root.findall("host"):
         status_el = host_el.find("status")
@@ -189,6 +214,9 @@ def _parse_nmap_xml(xml_text: str) -> list[ScannedHost]:
 
         if not ip_address:
             continue
+
+        if not mac_address and ip_address in arp_table:
+            mac_address = arp_table[ip_address]
 
         hostname = None
         hostnames_el = host_el.find("hostnames")

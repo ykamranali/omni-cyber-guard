@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.deps import get_db, get_current_active_user
 from app.models.user import User
-from app.schemas.system import SystemStatusOut, ComponentStatus
+from app.schemas.system import SystemStatusOut, ComponentStatus, NetworkInfoOut
+from fastapi import Request
+import socket
 
 router = APIRouter(prefix="/system", tags=["System"])
 
@@ -46,3 +48,20 @@ def system_status(
         "down" if any(c.status == "down" for c in components) else "degraded"
     )
     return SystemStatusOut(overall_status=overall, components=components)
+
+@router.get("/network-info", response_model=NetworkInfoOut)
+def get_network_info(request: Request, current_user: User = Depends(get_current_active_user)):
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('10.255.255.255', 1))
+        local_ip = s.getsockname()[0]
+    except Exception:
+        local_ip = '127.0.0.1'
+    finally:
+        s.close()
+    
+    return NetworkInfoOut(
+        client_ip=request.client.host if request.client else "unknown",
+        server_local_ip=local_ip
+    )
+

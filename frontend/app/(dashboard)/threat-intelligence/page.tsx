@@ -60,7 +60,7 @@ export default function ThreatIntelligencePage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
-          <div className="jarvis-panel p-5 group">
+          <div className="hud-panel p-5 group">
             <div className="flex items-center gap-4">
               <div className={cn("glossy-icon p-3 rounded-xl border border-current shadow-neon transition-transform group-hover:scale-110", data?.global_risk_level === "ELEVATED" ? "text-red-500" : "text-primary")}>
                 <Activity className={cn("h-6 w-6 animate-pulse-glow")} />
@@ -73,7 +73,7 @@ export default function ThreatIntelligencePage() {
               </div>
             </div>
           </div>
-          <div className="jarvis-panel p-5 group">
+          <div className="hud-panel p-5 group">
             <div className="flex items-center gap-4">
               <div className="glossy-icon p-3 rounded-xl border border-primary text-primary shadow-neon transition-transform group-hover:scale-110">
                 <ShieldAlert className="h-6 w-6 animate-pulse-glow" />
@@ -84,7 +84,7 @@ export default function ThreatIntelligencePage() {
               </div>
             </div>
           </div>
-          <div className="jarvis-panel p-5 group">
+          <div className="hud-panel p-5 group">
             <div className="flex items-center gap-4">
               <div className="glossy-icon p-3 rounded-xl border border-purple-500 text-purple-500 shadow-[0_0_15px_#A855F7] transition-transform group-hover:scale-110">
                 <Satellite className="h-6 w-6 animate-spin-slow" />
@@ -97,9 +97,16 @@ export default function ThreatIntelligencePage() {
           </div>
         </div>
 
-        <div className="jarvis-panel border-primary/50 relative">
-          <div className="absolute inset-0 bg-primary h-1 w-full animate-hud-scan opacity-50 shadow-neon pointer-events-none" />
-          <div className="border-b border-primary/20 bg-surface/40 backdrop-blur p-4 relative z-10">
+        <div className="satellite-feed-bg rounded-sm relative overflow-hidden">
+          {/* Flowing energy wave */}
+          <div className="absolute inset-0 top-1/2 -translate-y-1/2 h-32 w-[200vw] bg-[radial-gradient(ellipse_at_center,rgba(14,165,233,0.4)_0%,transparent_50%)] animate-energy-wave mix-blend-screen pointer-events-none z-0" />
+          {/* Floating red threat particles */}
+          <div className="absolute top-10 left-10 text-red-500 animate-float-particle opacity-50 z-10"><AlertTriangle size={16} /></div>
+          <div className="absolute top-32 right-20 text-red-500 animate-float-particle opacity-40 z-10" style={{animationDelay: "1s"}}><AlertTriangle size={24} /></div>
+          <div className="absolute bottom-10 left-1/3 text-orange-500 animate-float-particle opacity-60 z-10" style={{animationDelay: "2s"}}><AlertTriangle size={12} /></div>
+          
+          <div className="absolute inset-0 bg-primary h-2 w-full animate-satellite-beam opacity-80 shadow-[0_0_20px_#0EA5E9,0_0_40px_#0EA5E9] pointer-events-none z-20 mix-blend-screen" />
+          <div className="border-b border-primary/40 bg-surface/80 backdrop-blur p-4 relative z-10">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold text-ink neon-text">Real-Time Threat Feed</h2>
