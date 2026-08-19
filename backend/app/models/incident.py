@@ -24,7 +24,7 @@ class Incident(Base, TimestampMixin):
     __tablename__ = "incidents"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    organization_id = Column(String, ForeignKey("organizations.id"), nullable=False, index=True)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True)
     
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)

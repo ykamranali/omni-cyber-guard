@@ -8,9 +8,10 @@ from app.models.compliance import ComplianceFramework, ComplianceControl
 from app.models.scan_job import ScanJob
 from app.models.dashboard_snapshot import DashboardSnapshot
 from app.models.scan_schedule import ScanSchedule
+from app.models.incident import Incident
 
 __all__ = [
     "Organization", "User", "Role", "Permission", "role_permissions", "user_roles",
     "Asset", "Finding", "AuditLog", "ComplianceFramework", "ComplianceControl",
-    "ScanJob", "DashboardSnapshot", "ScanSchedule",
+    "ScanJob", "DashboardSnapshot", "ScanSchedule", "Incident"
 ]
