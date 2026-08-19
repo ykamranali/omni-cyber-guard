@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FileBarChart2, Download, FileText, FileSpreadsheet, Loader2 } from "lucide-react";
+import { FileBarChart2, Download, FileText, FileSpreadsheet, Loader2, Sparkles } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { api } from "@/lib/api";
+import { motion } from "framer-motion";
 
 export default function ReportsPage() {
   const [isGeneratingExe, setIsGeneratingExe] = useState(false);
@@ -44,65 +45,97 @@ export default function ReportsPage() {
     }
   };
 
+  const container = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.1 }
+    }
+  };
+
+  const item = {
+    hidden: { opacity: 0, scale: 0.95, y: 20 },
+    show: { opacity: 1, scale: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+  };
+
   return (
-    <div className="flex flex-col gap-6 p-6">
-      <div className="flex items-center gap-3 border-b border-border pb-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-secondary">
-          <FileBarChart2 className="h-5 w-5 text-white" />
+    <div className="flex flex-col gap-8 p-8 max-w-7xl mx-auto w-full">
+      <motion.div 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex items-center gap-4 border-b border-border/50 pb-6"
+      >
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 border border-primary/20 shadow-neon">
+          <FileBarChart2 className="h-6 w-6 text-primary" />
         </div>
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-ink">Reports</h1>
-          <p className="text-sm text-muted">Generate and download professional security reports</p>
+          <h1 className="text-2xl font-bold tracking-tight text-ink neon-text">Report Generation</h1>
+          <p className="text-muted mt-1">Compile and export professional security reports for executive and technical audiences.</p>
         </div>
-      </div>
+      </motion.div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-500/10 text-red-500">
-              <FileText className="h-5 w-5" />
+      <motion.div 
+        variants={container}
+        initial="hidden"
+        animate="show"
+        className="grid gap-8 md:grid-cols-2 lg:grid-cols-3"
+      >
+        {/* Executive Report */}
+        <motion.div variants={item} className="group flex flex-col gap-6 rounded-2xl glass-panel p-8 transition-all duration-300 hover:shadow-neon hover:border-primary/50 relative overflow-hidden">
+          <div className="absolute -right-20 -top-20 h-40 w-40 rounded-full bg-red-500/5 blur-3xl group-hover:bg-red-500/10 transition-colors" />
+          
+          <div className="flex items-start gap-4 relative z-10">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500 border border-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.2)]">
+              <FileText className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="font-semibold text-ink">Executive Security Report</h3>
-              <p className="text-xs text-muted">PDF Format</p>
+              <h3 className="font-bold text-ink text-lg tracking-wide">Executive Summary</h3>
+              <p className="text-xs font-mono tracking-widest text-red-500 uppercase mt-1">PDF Format</p>
             </div>
           </div>
-          <p className="text-sm text-muted flex-1">
-            A high-level overview of your organization&apos;s security posture, including total assets, risk scores, and critical vulnerability summaries.
+          <p className="text-sm text-muted leading-relaxed flex-1 relative z-10">
+            A high-level overview of your organization's security posture, including total assets, risk scores, and critical vulnerability summaries suitable for C-suite presentation.
           </p>
-          <button
-            onClick={() => downloadReport("/reports/executive/pdf", "Executive_Security_Report.pdf", setIsGeneratingExe)}
-            disabled={isGeneratingExe}
-            className="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
-          >
-            {isGeneratingExe ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            {isGeneratingExe ? "Generating..." : "Download PDF"}
-          </button>
-        </div>
+          <div className="mt-auto relative z-10 pt-4 border-t border-border/50">
+            <button
+              onClick={() => downloadReport("/reports/executive/pdf", "Executive_Security_Report.pdf", setIsGeneratingExe)}
+              disabled={isGeneratingExe}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-surface-hover border border-border/50 px-4 py-3 text-sm font-semibold text-ink transition-all hover:bg-red-500 hover:text-white hover:border-red-500 hover:shadow-[0_0_15px_rgba(239,68,68,0.5)] disabled:opacity-50 group-hover:bg-primary/5"
+            >
+              {isGeneratingExe ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
+              {isGeneratingExe ? "Generating Report..." : "Compile & Download"}
+            </button>
+          </div>
+        </motion.div>
 
-        <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10 text-blue-500">
-              <FileText className="h-5 w-5" />
+        {/* Technical Report */}
+        <motion.div variants={item} className="group flex flex-col gap-6 rounded-2xl jarvis-panel p-8 transition-all duration-300 hover:shadow-neon hover:border-primary/50 relative overflow-hidden">
+          <div className="absolute -right-20 -top-20 h-40 w-40 rounded-full bg-primary/5 blur-3xl group-hover:bg-primary/10 transition-colors" />
+          
+          <div className="flex items-start gap-4 relative z-10">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20 shadow-[0_0_15px_rgba(14,165,233,0.2)]">
+              <Sparkles className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="font-semibold text-ink">Technical Vulnerability Report</h3>
-              <p className="text-xs text-muted">PDF Format</p>
+              <h3 className="font-bold text-ink text-lg tracking-wide">Technical Details</h3>
+              <p className="text-xs font-mono tracking-widest text-primary uppercase mt-1">PDF Format</p>
             </div>
           </div>
-          <p className="text-sm text-muted flex-1">
-            Detailed technical breakdown of all open findings, including CVEs, CVSS scores, affected assets, and remediation steps.
+          <p className="text-sm text-muted leading-relaxed flex-1 relative z-10">
+            Detailed technical breakdown of all open findings, including CVEs, CVSS scores, affected assets, and remediation steps intended for engineering teams.
           </p>
-          <div className="flex flex-col gap-2">
+          
+          <div className="flex flex-col gap-3 mt-auto relative z-10 pt-4 border-t border-primary/20">
+            <label className="text-xs font-semibold text-muted uppercase tracking-wider">Scope Selection</label>
             <select
               value={scanIdTech}
               onChange={(e) => setScanIdTech(e.target.value)}
-              className="h-9 w-full rounded-md border border-border bg-surface px-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary/40"
+              className="h-10 w-full rounded-xl border border-primary/30 bg-surface-hover/50 px-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all"
             >
-              <option value="all">All Scans</option>
+              <option value="all">Global Workspace (All Scans)</option>
               {scans?.filter(s => s.status === "completed").map((s) => (
                 <option key={s.id} value={s.id}>
-                  Scan: {s.target_cidr}
+                  Scan Target: {s.target_cidr}
                 </option>
               ))}
             </select>
@@ -112,53 +145,58 @@ export default function ReportsPage() {
                 downloadReport(url, "Technical_Vulnerability_Report.pdf", setIsGeneratingTech);
               }}
               disabled={isGeneratingTech}
-              className="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-neon disabled:opacity-50 mt-1"
             >
-              {isGeneratingTech ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-              {isGeneratingTech ? "Generating..." : "Download PDF"}
+              {isGeneratingTech ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
+              {isGeneratingTech ? "Generating Report..." : "Compile & Download"}
             </button>
           </div>
-        </div>
+        </motion.div>
         
-        <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10 text-green-500">
-              <FileSpreadsheet className="h-5 w-5" />
+        {/* Asset Export */}
+        <motion.div variants={item} className="group flex flex-col gap-6 rounded-2xl glass-panel p-8 transition-all duration-300 hover:shadow-[0_0_15px_rgba(34,197,94,0.4)] hover:border-green-500/50 relative overflow-hidden">
+          <div className="absolute -right-20 -top-20 h-40 w-40 rounded-full bg-green-500/5 blur-3xl group-hover:bg-green-500/10 transition-colors" />
+          
+          <div className="flex items-start gap-4 relative z-10">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-green-500/10 text-green-500 border border-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.2)]">
+              <FileSpreadsheet className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="font-semibold text-ink">Asset Inventory Export</h3>
-              <p className="text-xs text-muted">CSV Format</p>
+              <h3 className="font-bold text-ink text-lg tracking-wide">Asset Inventory</h3>
+              <p className="text-xs font-mono tracking-widest text-green-500 uppercase mt-1">CSV Raw Export</p>
             </div>
           </div>
-          <p className="text-sm text-muted flex-1">
-            Raw export of all discovered and manually entered assets across your organization.
+          <p className="text-sm text-muted leading-relaxed flex-1 relative z-10">
+            Raw, unfiltered data export of all discovered and manually entered assets across your organization for external BI tools.
           </p>
-          <div className="flex flex-col gap-2">
+          
+          <div className="flex flex-col gap-3 mt-auto relative z-10 pt-4 border-t border-border/50">
+            <label className="text-xs font-semibold text-muted uppercase tracking-wider">Scope Selection</label>
             <select
               value={scanIdAsset}
               onChange={(e) => setScanIdAsset(e.target.value)}
-              className="h-9 w-full rounded-md border border-border bg-surface px-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary/40"
+              className="h-10 w-full rounded-xl border border-border/50 bg-surface-hover/50 px-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-green-500/50 transition-all"
             >
-              <option value="all">All Scans</option>
+              <option value="all">Global Workspace (All Scans)</option>
               {scans?.filter(s => s.status === "completed").map((s) => (
                 <option key={s.id} value={s.id}>
-                  Scan: {s.target_cidr}
+                  Scan Target: {s.target_cidr}
                 </option>
               ))}
             </select>
             <button 
               onClick={() => {
                 const url = scanIdAsset !== "all" ? `/assets/export/csv?scan_id=${scanIdAsset}` : "/assets/export/csv";
-                // Using standard HTML download for CSV
                 window.location.href = `http://localhost:8000/api/v1${url}`;
               }}
-              className="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-surface-hover border border-border/50 px-4 py-3 text-sm font-semibold text-ink transition-all hover:bg-green-500 hover:text-white hover:border-green-500 hover:shadow-[0_0_15px_rgba(34,197,94,0.5)] mt-1"
             >
-              <Download className="h-4 w-4" /> Download CSV
+              <Download className="h-5 w-5" /> Export Data
             </button>
           </div>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     </div>
   );
 }
+

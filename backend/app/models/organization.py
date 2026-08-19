@@ -26,6 +26,12 @@ class Organization(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     subscription_plan: Mapped[str] = mapped_column(String(50), default="trial")
     license_seats: Mapped[int] = mapped_column(default=10)
 
+    # Enterprise Settings
+    slack_webhook_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    teams_webhook_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    sso_provider: Mapped[str] = mapped_column(String(50), default="none")
+    sso_metadata_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+
     users: Mapped[list["User"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
     assets: Mapped[list["Asset"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
     roles: Mapped[list["Role"]] = relationship(back_populates="organization", cascade="all, delete-orphan")

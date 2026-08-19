@@ -107,22 +107,23 @@ export function IncidentDrawer({ incident, onClose }: IncidentDrawerProps) {
           {activeTab === "playbook" && (
             <div className="h-full flex flex-col">
               {incident.ai_playbook ? (
-                <div className="prose prose-invert prose-sm max-w-none prose-pre:bg-black/50 prose-pre:border prose-pre:border-border/50 prose-a:text-primary hover:prose-a:text-primary-hover">
+                <div className="prose prose-invert prose-sm max-w-none prose-pre:bg-background/80 prose-pre:border prose-pre:border-primary/30 prose-pre:shadow-neon prose-a:text-primary hover:prose-a:text-primary-hover">
                   <ReactMarkdown>{incident.ai_playbook}</ReactMarkdown>
                 </div>
               ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-6 shadow-neon">
-                    <Bot size={32} className="text-primary" />
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-surface-hover/20 rounded-2xl border border-border/50">
+                  <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-6 shadow-neon relative group">
+                    <div className="absolute inset-0 rounded-full border-2 border-primary/20 animate-ping group-hover:border-primary/50" />
+                    <Bot size={36} className="text-primary z-10" />
                   </div>
-                  <h3 className="text-lg font-bold text-ink mb-2">Automated Remediation Playbook</h3>
+                  <h3 className="text-xl font-bold text-ink neon-text mb-3">Automated Remediation Playbook</h3>
                   <p className="text-sm text-muted max-w-md mb-8 leading-relaxed">
                     Omni Cyber Guard can analyze this incident&apos;s context and generate a step-by-step remediation playbook, complete with containment strategies and necessary commands.
                   </p>
                   <button 
                     onClick={() => generatePlaybook.mutate()}
                     disabled={generatePlaybook.isPending}
-                    className="flex items-center gap-2 px-6 py-3 rounded-full bg-primary text-primary-foreground font-bold hover:bg-primary-hover transition-all shadow-neon disabled:opacity-50"
+                    className="flex items-center gap-2 px-8 py-4 rounded-xl bg-primary/10 border border-primary/50 text-primary font-bold hover:bg-primary hover:text-white transition-all shadow-neon disabled:opacity-50 uppercase tracking-widest text-xs"
                   >
                     {generatePlaybook.isPending ? <Loader2 size={18} className="animate-spin" /> : <Bot size={18} />}
                     {generatePlaybook.isPending ? "Generating Playbook..." : "Generate AI Playbook"}

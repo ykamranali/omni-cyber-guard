@@ -8,7 +8,7 @@ from app.core.rbac import Permission
 from app.core.security import hash_password
 from app.models.organization import Organization
 from app.models.user import User
-from app.schemas.organization import OrganizationOut, OrganizationBrandingUpdate, OrganizationCreate
+from app.schemas.organization import OrganizationOut, OrganizationBrandingUpdate, OrganizationCreate, OrganizationSettingsUpdate
 from app.services.org_provisioning import provision_new_organization
 from app.services.audit import log_action
 
@@ -39,6 +39,46 @@ def update_branding(
     db.commit()
     db.refresh(org)
     return org
+
+@router.patch("/current/settings", response_model=OrganizationOut)
+def update_settings(
+    payload: OrganizationSettingsUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(Permission.MANAGE_ORGANIZATION)),
+):
+    org = db.query(Organization).filter(Organization.id == current_user.organization_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(org, field, value)
+    db.commit()
+    db.refresh(org)
+    return org
+
+
+@router.post("/current/webhooks/test")
+def test_webhooks(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(Permission.MANAGE_ORGANIZATION)),
+):
+    from app.services.notifications import NotificationService
+    
+    org = db.query(Organization).filter(Organization.id == current_user.organization_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+        
+    if not org.slack_webhook_url and not org.teams_webhook_url:
+        raise HTTPException(status_code=400, detail="No webhooks configured.")
+        
+    title = "Omni Cyber Guard - Test Alert"
+    message = "This is a test notification from your Omni Cyber Guard platform to verify webhook connectivity."
+    
+    if org.slack_webhook_url:
+        NotificationService.send_webhook_notification(org.slack_webhook_url, title, message, provider="slack")
+    if org.teams_webhook_url:
+        NotificationService.send_webhook_notification(org.teams_webhook_url, title, message, provider="teams")
+        
+    return {"status": "success", "message": "Test alerts dispatched."}
 
 
 # --- Platform-level (super admin only): manage every organization on the platform ---

@@ -15,7 +15,10 @@ class OrganizationOut(BaseModel):
     footer_text: str
     subscription_plan: str
     license_seats: int
-
+    slack_webhook_url: str | None
+    teams_webhook_url: str | None
+    sso_provider: str
+    sso_metadata_url: str | None
 
 class OrganizationCreate(BaseModel):
     name: str
@@ -26,10 +29,15 @@ class OrganizationCreate(BaseModel):
     admin_full_name: str
     admin_password: str
 
-
 class OrganizationBrandingUpdate(BaseModel):
     logo_url: str | None = None
     favicon_url: str | None = None
     primary_color: str | None = None
     secondary_color: str | None = None
     footer_text: str | None = None
+
+class OrganizationSettingsUpdate(BaseModel):
+    slack_webhook_url: str | None = None
+    teams_webhook_url: str | None = None
+    sso_provider: str | None = None
+    sso_metadata_url: str | None = None

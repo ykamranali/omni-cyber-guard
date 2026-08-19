@@ -21,6 +21,24 @@ class NotificationService:
         """
         logger.info(f"[IN-APP NOTIFICATION] User: {user_id} | Title: {title} | Message: {message}")
 
+    @staticmethod
+    def send_webhook_notification(url: str, title: str, message: str, provider: str = "slack") -> None:
+        """
+        Sends a payload to a Slack or MS Teams webhook URL.
+        """
+        import requests
+        payload = {}
+        if provider == "slack":
+            payload = {"text": f"*{title}*\n{message}"}
+        elif provider == "teams":
+            payload = {"title": title, "text": message}
+            
+        try:
+            logger.info(f"[WEBHOOK NOTIFICATION] Sending to {provider}: {title}")
+            requests.post(url, json=payload, timeout=5)
+        except Exception as e:
+            logger.error(f"[WEBHOOK NOTIFICATION] Failed to send to {provider}: {str(e)}")
+
     @classmethod
     def notify_scan_completion(cls, job_id: uuid.UUID, org_id: uuid.UUID, user_id: Optional[uuid.UUID], status: str, hosts: int, findings: int) -> None:
         title = f"Scan {status.capitalize()}"
