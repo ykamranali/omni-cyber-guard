@@ -275,7 +275,7 @@ function StatCard({
   label,
   value,
   accent,
-  sysCode
+  iconColor
 }: {
   icon: typeof AlertTriangle;
   label: string;
