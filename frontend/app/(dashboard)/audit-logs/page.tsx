@@ -13,6 +13,7 @@ interface AuditLog {
   ip_address: string | null;
   created_at: string;
   actor_user_id: string | null;
+  actor_email: string | null;
   metadata: any;
 }
 
@@ -44,7 +45,8 @@ export default function AuditLogsPage() {
   const filteredLogs = logs.filter((l) => 
     l.action.toLowerCase().includes(search.toLowerCase()) || 
     l.resource_type.toLowerCase().includes(search.toLowerCase()) ||
-    l.ip_address?.includes(search)
+    l.ip_address?.includes(search) ||
+    l.actor_email?.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -106,8 +108,8 @@ export default function AuditLogsPage() {
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <User className="h-4 w-4 text-muted" />
-                      <span className="font-mono text-xs text-muted truncate max-w-[120px]">
-                        {log.actor_user_id || "System"}
+                      <span className="text-sm truncate max-w-[200px]" title={log.actor_user_id || ""}>
+                        {log.actor_email || log.actor_user_id || "System"}
                       </span>
                     </div>
                   </td>

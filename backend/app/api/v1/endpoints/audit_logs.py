@@ -15,10 +15,11 @@ def list_audit_logs(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    query = db.query(AuditLog).filter(AuditLog.organization_id == current_user.organization_id)
+    query = db.query(AuditLog, User.email).outerjoin(User, AuditLog.actor_user_id == User.id)\
+        .filter(AuditLog.organization_id == current_user.organization_id)
     
     total = query.count()
-    logs = query.order_by(desc(AuditLog.created_at)).offset(skip).limit(limit).all()
+    results = query.order_by(desc(AuditLog.created_at)).offset(skip).limit(limit).all()
     
     return {
         "items": [
@@ -30,9 +31,10 @@ def list_audit_logs(
                 "ip_address": log.ip_address,
                 "created_at": log.created_at.isoformat(),
                 "actor_user_id": str(log.actor_user_id) if log.actor_user_id else None,
+                "actor_email": email,
                 "metadata": log.metadata_json
             }
-            for log in logs
+            for log, email in results
         ],
         "total": total,
         "skip": skip,
