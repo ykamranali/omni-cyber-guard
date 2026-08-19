@@ -3,12 +3,94 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Topbar } from "@/components/layout/topbar";
-import { Plus, Shield, AlertTriangle, ArrowRight, ArrowLeft } from "lucide-react";
+import { Plus, Shield, AlertTriangle, ArrowRight, ArrowLeft, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { IncidentDrawer } from "@/components/incidents/incident-drawer";
+
+function ReportIncidentModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [severity, setSeverity] = useState<"critical" | "high" | "medium" | "low" | "info">("medium");
+
+  const createIncident = useMutation({
+    mutationFn: (data: { title: string; description: string; severity: string }) =>
+      api.post("/incidents", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["incidents"] });
+      onClose();
+      setTitle("");
+      setDescription("");
+      setSeverity("medium");
+    },
+  });
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+      <div className="bg-surface border border-border/50 shadow-glass rounded-2xl w-full max-w-md p-6 relative">
+        <button onClick={onClose} className="absolute top-4 right-4 p-2 hover:bg-surface-hover rounded-full text-muted hover:text-ink">
+          <X size={20} />
+        </button>
+        <h2 className="text-xl font-bold text-ink neon-text mb-4">Report an Incident</h2>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-1.5">Title</label>
+            <input 
+              type="text" 
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Suspicious Login Activity"
+              className="w-full bg-background border border-border/50 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-primary"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-1.5">Severity</label>
+            <select 
+              value={severity}
+              onChange={(e) => setSeverity(e.target.value as any)}
+              className="w-full bg-background border border-border/50 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-primary"
+            >
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+              <option value="info">Info</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-1.5">Description</label>
+            <textarea 
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe the incident details..."
+              rows={4}
+              className="w-full bg-background border border-border/50 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-primary resize-none"
+            />
+          </div>
+          
+          <div className="pt-2 flex justify-end gap-3">
+            <Button variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button 
+              onClick={() => createIncident.mutate({ title, description, severity })}
+              disabled={createIncident.isPending || !title}
+              className="shadow-neon"
+            >
+              {createIncident.isPending ? "Reporting..." : "Report Incident"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface Incident {
   id: string;
@@ -29,6 +111,7 @@ const COLUMNS = [
 export default function IncidentsPage() {
   const queryClient = useQueryClient();
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   const { data: incidents, isLoading } = useQuery({
     queryKey: ["incidents"],
@@ -52,7 +135,7 @@ export default function IncidentsPage() {
             <h1 className="text-2xl font-bold text-ink neon-text">Active Triage Board</h1>
             <p className="text-sm text-muted uppercase tracking-wider font-bold">Manage security incidents and coordinate response playbooks.</p>
           </div>
-          <Button className="shadow-neon"><Plus size={16} className="mr-2" /> Report Incident</Button>
+          <Button className="shadow-neon" onClick={() => setIsReportModalOpen(true)}><Plus size={16} className="mr-2" /> Report Incident</Button>
         </div>
 
         <div className="flex-1 flex gap-6 overflow-x-auto pb-4">
@@ -134,6 +217,11 @@ export default function IncidentsPage() {
           onClose={() => setSelectedIncident(null)} 
         />
       )}
+      
+      <ReportIncidentModal 
+        isOpen={isReportModalOpen} 
+        onClose={() => setIsReportModalOpen(false)} 
+      />
     </>
   );
 }

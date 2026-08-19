@@ -51,9 +51,9 @@ def run_network_scan(scan_job_id: str) -> None:
             scan_result = scanner.execute(job.target_cidr, progress_callback=log_progress)
             
             # If it's nmap, it returns hosts. Otherwise it returns findings directly (for now).
-            hosts = getattr(scan_result, 'raw_data', [])
-            findings_generated = getattr(scan_result, 'findings_generated', 0)
-            mock_findings = getattr(scan_result, 'findings', [])
+            hosts = scan_result.raw_data or []
+            findings_generated = scan_result.findings_generated or 0
+            mock_findings = scan_result.findings or []
             
         except (RuntimeError, Exception) as exc:
             from app.services.network_scanner import ScanAuthorizationError

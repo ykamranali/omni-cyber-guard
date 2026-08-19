@@ -22,9 +22,11 @@ export function IncidentDrawer({ incident, onClose }: IncidentDrawerProps) {
     onSuccess: (updatedIncident: any) => {
       // We mutate the local incident state or rely on React Query cache update
       queryClient.setQueryData(["incidents"], (old: any) => 
-        old.map((i: any) => i.id === updatedIncident.id ? updatedIncident : i)
+        old ? old.map((i: any) => i.id === updatedIncident.id ? updatedIncident : i) : [updatedIncident]
       );
-      // Since `incident` prop might not update instantly, we could force a refresh or rely on parent
+    },
+    onError: (err) => {
+      console.error("Failed to generate playbook:", err);
     }
   });
 
@@ -115,7 +117,7 @@ export function IncidentDrawer({ incident, onClose }: IncidentDrawerProps) {
                   </div>
                   <h3 className="text-lg font-bold text-ink mb-2">Automated Remediation Playbook</h3>
                   <p className="text-sm text-muted max-w-md mb-8 leading-relaxed">
-                    Omni Cyber Guard can analyze this incident's context and generate a step-by-step remediation playbook, complete with containment strategies and necessary commands.
+                    Omni Cyber Guard can analyze this incident&apos;s context and generate a step-by-step remediation playbook, complete with containment strategies and necessary commands.
                   </p>
                   <button 
                     onClick={() => generatePlaybook.mutate()}
