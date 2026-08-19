@@ -292,7 +292,7 @@ export default function SettingsPage() {
                               placeholder="https://idp.example.com/metadata.xml"
                               className="w-full rounded-lg border border-border/50 bg-background px-3 py-2.5 text-sm text-ink focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50 font-mono"
                             />
-                            <p className="text-xs text-muted/70">The URL to auto-fetch your IdP's metadata XML.</p>
+                            <p className="text-xs text-muted/70">The URL to auto-fetch your IdP&apos;s metadata XML.</p>
                           </div>
                         )}
                       </div>

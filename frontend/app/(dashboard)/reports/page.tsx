@@ -94,7 +94,7 @@ export default function ReportsPage() {
             </div>
           </div>
           <p className="text-sm text-muted leading-relaxed flex-1 relative z-10">
-            A high-level overview of your organization's security posture, including total assets, risk scores, and critical vulnerability summaries suitable for C-suite presentation.
+            A high-level overview of your organization&apos;s security posture, including total assets, risk scores, and critical vulnerability summaries suitable for C-suite presentation.
           </p>
           <div className="mt-auto relative z-10 pt-4 border-t border-border/50">
             <button
