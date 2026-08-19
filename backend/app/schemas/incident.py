@@ -22,7 +22,7 @@ class IncidentUpdate(BaseModel):
 
 class IncidentOut(IncidentBase):
     id: uuid.UUID
-    organization_id: str
+    organization_id: uuid.UUID
     status: IncidentStatus
     asset_id: Optional[uuid.UUID] = None
     assigned_to: Optional[uuid.UUID] = None
