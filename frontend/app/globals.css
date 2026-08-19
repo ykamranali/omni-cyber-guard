@@ -57,75 +57,74 @@ html.light {
   .glass-card {
     @apply bg-surface/50 backdrop-blur-md border border-border/60 rounded-xl shadow-glass;
   }
-  .jarvis-panel {
-    @apply bg-surface/40 backdrop-blur-md border border-primary/40 shadow-neon rounded-2xl relative overflow-hidden transition-all duration-300;
+  
+  /* NEW PREMIUM CLASSES */
+  .premium-card {
+    @apply bg-surface/40 backdrop-blur-2xl border border-white/5 rounded-[2rem] shadow-[inset_0_1px_1px_rgba(255,255,255,0.1),_0_8px_32px_rgba(0,0,0,0.3)] relative overflow-hidden transition-all duration-300;
   }
-  .jarvis-panel::before {
-    content: '';
-    @apply absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-50 pointer-events-none;
+  .premium-card:hover {
+    @apply border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2),_0_12px_48px_rgba(0,0,0,0.4)] -translate-y-0.5;
+  }
+  .premium-card-inner {
+    @apply absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none;
+  }
+  .premium-glass-icon {
+    @apply flex items-center justify-center rounded-2xl bg-gradient-to-br from-surface to-surface/40 border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2),_0_4px_16px_rgba(0,0,0,0.2)] backdrop-blur-md transition-all duration-300;
+  }
+
+  /* LEGACY HUD CLASSES (Keep for compatibility with other pages for now, but tone down) */
+  .jarvis-panel {
+    @apply bg-surface/40 backdrop-blur-md border border-primary/20 shadow-glass rounded-2xl relative overflow-hidden transition-all duration-300;
   }
   .hud-panel {
-    @apply bg-surface/80 border border-primary/30 shadow-[inset_0_0_15px_rgba(var(--color-primary)/0.15)] rounded-sm relative overflow-hidden transition-all duration-300;
-  }
-  .hud-panel::after {
-    content: '';
-    @apply absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-primary pointer-events-none;
-  }
-  .hud-panel::before {
-    content: '';
-    @apply absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-primary pointer-events-none;
+    @apply bg-surface/60 border border-primary/20 shadow-[inset_0_0_15px_rgba(var(--color-primary)/0.05)] rounded-2xl relative overflow-hidden transition-all duration-300;
   }
   .circuit-panel {
-    @apply bg-surface/90 border-2 border-primary/40 shadow-neon rounded-none relative overflow-visible transition-transform duration-300;
+    @apply bg-surface/90 border border-primary/20 shadow-glass rounded-xl relative overflow-visible transition-transform duration-300;
   }
   .blueprint-grid {
     background-image: 
-      linear-gradient(rgba(14, 165, 233, 0.1) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(14, 165, 233, 0.1) 1px, transparent 1px),
-      linear-gradient(rgba(14, 165, 233, 0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(14, 165, 233, 0.05) 1px, transparent 1px);
-    background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
-    background-position: -1px -1px, -1px -1px, -1px -1px, -1px -1px;
+      radial-gradient(circle at 15% 50%, rgba(var(--color-primary)/0.03), transparent 30%),
+      radial-gradient(circle at 85% 30%, rgba(var(--color-secondary)/0.03), transparent 30%);
+    background-color: rgb(var(--color-background));
   }
+  
   .glossy-icon {
     @apply relative flex items-center justify-center bg-gradient-to-br from-surface-hover to-surface border border-border/50 shadow-glass transition-transform duration-300 hover:scale-110 hover:-translate-y-1;
     backdrop-filter: blur(10px);
   }
   .neon-text {
-    text-shadow: 0 0 5px rgb(var(--color-primary) / 0.8), 0 0 10px rgb(var(--color-primary) / 0.5);
+    text-shadow: 0 0 5px rgb(var(--color-primary) / 0.5);
   }
   .neon-text-critical {
-    text-shadow: 0 0 5px rgba(239, 68, 68, 0.8), 0 0 10px rgba(239, 68, 68, 0.5);
+    text-shadow: 0 0 5px rgba(239, 68, 68, 0.5);
   }
   .satellite-feed-bg {
-    background-image: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(14, 165, 233, 0.1) 2px, rgba(14, 165, 233, 0.1) 4px);
-    background-size: 100% 4px;
-    @apply animate-cyber-lines relative overflow-hidden border border-primary shadow-[inset_0_0_30px_rgba(14,165,233,0.3)];
+    @apply relative overflow-hidden border border-border/50 shadow-glass rounded-2xl bg-surface/40 backdrop-blur-md;
   }
   .network-lightning-bg {
-    @apply relative overflow-hidden bg-surface-hover/80;
-    box-shadow: inset 0 0 40px rgba(var(--color-primary) / 0.2);
+    @apply relative overflow-hidden bg-surface/40 backdrop-blur-2xl border border-white/5 rounded-3xl;
+    box-shadow: inset 0 1px 1px rgba(255,255,255,0.1), 0 8px 32px rgba(0,0,0,0.3);
   }
   .network-lightning-bg::before {
     content: '';
     position: absolute;
     inset: -50%;
-    background: radial-gradient(circle at center, rgba(var(--color-primary)/0.4) 0%, transparent 50%),
-                radial-gradient(circle at 80% 20%, rgba(239,68,68,0.4) 0%, transparent 40%),
-                radial-gradient(circle at 20% 80%, rgba(34,197,94,0.4) 0%, transparent 40%);
-    @apply animate-network-lightning mix-blend-screen pointer-events-none;
+    background: radial-gradient(circle at 30% 50%, rgba(var(--color-primary)/0.15) 0%, transparent 40%),
+                radial-gradient(circle at 70% 50%, rgba(var(--color-secondary)/0.1) 0%, transparent 40%);
+    @apply mix-blend-screen pointer-events-none;
   }
   .radar-container {
-    @apply relative overflow-hidden rounded-full border border-primary/30;
-    box-shadow: 0 0 20px rgba(var(--color-primary)/0.2), inset 0 0 20px rgba(var(--color-primary)/0.2);
+    @apply relative overflow-hidden rounded-full border border-primary/20 bg-surface/20 backdrop-blur-sm;
+    box-shadow: 0 0 20px rgba(var(--color-primary)/0.1), inset 0 0 20px rgba(var(--color-primary)/0.1);
   }
   .radar-sweep-blade {
     @apply absolute inset-0 pointer-events-none;
-    background: conic-gradient(from 0deg, transparent 70%, rgba(var(--color-primary)/0.8) 100%);
+    background: conic-gradient(from 0deg, transparent 70%, rgba(var(--color-primary)/0.4) 100%);
     animation: radar-sweep 4s linear infinite;
   }
   .neon-pulse-border {
-    animation: pulse-neon 2s ease-in-out infinite;
+    animation: pulse-neon 3s ease-in-out infinite;
   }
 }
 

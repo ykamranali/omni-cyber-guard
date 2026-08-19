@@ -100,7 +100,7 @@ export default function DashboardPage() {
   return (
     <>
       <Topbar title="Security Dashboard" criticalCount={summary?.findings_by_severity.critical ?? 0} />
-      <main className="flex-1 overflow-y-auto bg-background blueprint-grid p-4 md:p-8">
+      <main className="flex-1 overflow-y-auto bg-background p-6 md:p-10">
         {isLoading && <p className="text-sm text-muted">Loading dashboard…</p>}
         {isError && (
           <p className="text-sm text-critical">
@@ -109,133 +109,159 @@ export default function DashboardPage() {
         )}
 
         {summary && (
-          <div className="relative z-10 space-y-6">
-            <div className="network-lightning-bg hud-panel p-6 border-primary/50 flex flex-col md:flex-row items-center justify-between mb-6 gap-4">
-              <div className="flex items-center gap-4 relative z-10">
-                <div className="p-3 border border-primary text-primary shadow-[inset_0_0_10px_rgba(14,165,233,0.5)] bg-surface/80">
-                  <Activity className="h-8 w-8 animate-pulse-glow" />
+          <div className="relative z-10 space-y-8 max-w-[1600px] mx-auto">
+            <div className="premium-card bg-gradient-to-r from-surface to-surface-hover p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="premium-card-inner"></div>
+              <div className="flex items-center gap-5 relative z-10">
+                <div className="premium-glass-icon w-14 h-14 text-primary">
+                  <Activity className="h-6 w-6" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold neon-text text-primary tracking-widest">LIVE NETWORK LINK</h3>
-                  <div className="flex flex-wrap gap-x-6 gap-y-1 mt-2 text-sm font-semibold uppercase tracking-wider text-muted">
-                    <p>LOCAL NODE: <span className="font-mono text-ink bg-surface-hover px-2 py-0.5 rounded ml-1">{networkInfo.local}</span></p>
-                    <p>PUBLIC IP: <span className="font-mono text-ink bg-surface-hover px-2 py-0.5 rounded ml-1">{networkInfo.public}</span></p>
+                  <h3 className="text-lg font-semibold text-ink tracking-wide">Live Network Link</h3>
+                  <div className="flex flex-wrap gap-x-6 gap-y-1 mt-1 text-xs font-medium uppercase tracking-widest text-muted">
+                    <p>LOCAL: <span className="font-mono text-ink/80">{networkInfo.local}</span></p>
+                    <p>PUBLIC: <span className="font-mono text-ink/80">{networkInfo.public}</span></p>
                   </div>
                 </div>
               </div>
-              <div className="relative z-10 flex items-center gap-2 px-4 py-2 border border-green-500/50 bg-green-500/10 rounded-full text-green-500 font-bold tracking-widest text-xs shadow-[0_0_15px_rgba(34,197,94,0.4)]">
-                <span className="h-2.5 w-2.5 rounded-full bg-green-500 animate-pulse-glow shadow-[0_0_8px_#22C55E]" /> 
-                SECURE UPLINK ACTIVE
+              <div className="relative z-10 flex items-center gap-2 px-4 py-1.5 border border-green-500/30 bg-green-500/10 rounded-full text-green-400 font-medium tracking-widest text-xs">
+                <span className="h-2 w-2 rounded-full bg-green-500 shadow-[0_0_8px_#22C55E] animate-pulse" /> 
+                SECURE UPLINK
               </div>
             </div>
 
             <div>
-              <h2 className="text-xl font-semibold text-ink neon-text">
+              <h2 className="text-2xl font-semibold text-ink tracking-tight">
                 Welcome back{user?.full_name ? `, ${user.full_name.split(" ")[0]}` : ""}
               </h2>
-              <p className="text-sm text-muted uppercase tracking-wider font-bold">Here&apos;s what&apos;s happening in your network grid today.</p>
+              <p className="text-sm text-muted mt-1">Here&apos;s a high-level overview of your network&apos;s security posture today.</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-              <StatCard icon={Server} label="Total Assets" value={summary.total_assets} accent="text-primary" sysCode="SYS:001" />
-              <StatCard icon={AlertTriangle} label="Open Findings" value={summary.open_findings} accent="text-high" sysCode="SYS:002" />
-              <StatCard icon={ShieldCheck} label="Critical Risks" value={summary.findings_by_severity.critical} accent="text-critical" sysCode="SYS:003" />
-              <StatCard icon={TrendingUp} label="Asset Health" value={`${summary.asset_health_percent}%`} accent="text-low" sysCode="SYS:004" />
-              <StatCard icon={ShieldCheck} label="Remediated (30d)" value={summary.remediated_findings_last_30_days} accent="text-low" sysCode="SYS:005" />
+              <StatCard icon={Server} label="Total Assets" value={summary.total_assets} accent="text-primary bg-primary/10 border-primary/20" iconColor="text-primary" />
+              <StatCard icon={AlertTriangle} label="Open Findings" value={summary.open_findings} accent="text-amber-500 bg-amber-500/10 border-amber-500/20" iconColor="text-amber-500" />
+              <StatCard icon={ShieldCheck} label="Critical Risks" value={summary.findings_by_severity.critical} accent="text-red-500 bg-red-500/10 border-red-500/20" iconColor="text-red-500" />
+              <StatCard icon={TrendingUp} label="Asset Health" value={`${summary.asset_health_percent}%`} accent="text-emerald-500 bg-emerald-500/10 border-emerald-500/20" iconColor="text-emerald-500" />
+              <StatCard icon={ShieldCheck} label="Remediated (30d)" value={summary.remediated_findings_last_30_days} accent="text-blue-500 bg-blue-500/10 border-blue-500/20" iconColor="text-blue-500" />
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <Card className="hud-panel flex items-center justify-around gap-4 lg:col-span-1">
-                <ScoreRing score={summary.security_score} label="Security Score" colorClass="#0EA5E9" />
-                <ScoreRing score={summary.risk_score} label="Risk Score" colorClass="#EF4444" />
+              <Card className="premium-card flex flex-col justify-center items-around gap-6 lg:col-span-1 p-6">
+                <div className="premium-card-inner"></div>
+                <div className="relative z-10 flex justify-around">
+                  <ScoreRing score={summary.security_score} label="Security Score" colorClass="#0EA5E9" />
+                  <ScoreRing score={summary.risk_score} label="Risk Score" colorClass="#EF4444" />
+                </div>
               </Card>
 
-              <Card className="hud-panel flex flex-col lg:col-span-1 relative overflow-hidden">
-                <CardHeader className="border-b border-primary/20 bg-surface/50"><CardTitle className="font-mono text-sm tracking-widest text-primary">HOLOGRAPHIC SHIELD</CardTitle></CardHeader>
-                <div className="flex-1 relative z-10 p-4">
+              <Card className="premium-card flex flex-col lg:col-span-1">
+                <div className="premium-card-inner"></div>
+                <CardHeader className="border-b border-white/5 bg-surface/30 relative z-10"><CardTitle className="text-sm font-medium text-muted">Holographic Shield</CardTitle></CardHeader>
+                <div className="flex-1 relative z-10 p-4 flex items-center justify-center">
                   <HolographicShield />
                 </div>
               </Card>
 
-              <Card className="hud-panel lg:col-span-1">
-                <CardHeader>
-                  <CardTitle>Top Risky Assets</CardTitle>
-                  <Link href="/assets" className="flex items-center gap-1 text-xs text-primary hover:underline">
-                    View all <ChevronRight size={12} />
-                  </Link>
-                </CardHeader>
-                {topRisky && topRisky.length > 0 ? (
-                  <div className="space-y-2">
-                    {topRisky.map((a) => (
-                      <div key={a.id} className="flex items-center justify-between text-sm">
-                        <div className="min-w-0">
-                          <p className="truncate text-ink/85">{a.hostname}</p>
-                          <p className="text-xs text-muted">{a.site || a.asset_type}</p>
-                        </div>
-                        <Badge label={a.risk_score >= 66 ? "critical" : a.risk_score >= 33 ? "high" : "low"} />
-                      </div>
-                    ))}
+              <Card className="premium-card lg:col-span-1 flex flex-col">
+                <div className="premium-card-inner"></div>
+                <CardHeader className="relative z-10 border-b border-white/5 bg-surface/30">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-medium text-muted">Top Risky Assets</CardTitle>
+                    <Link href="/assets" className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors">
+                      View all <ChevronRight size={12} />
+                    </Link>
                   </div>
-                ) : (
-                  <p className="text-xs text-muted">
-                    No risk-scored assets yet — risk scores are computed from real findings, so this fills in as you add findings or run a scan.
-                  </p>
-                )}
-              </Card>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <Card className="hud-panel lg:col-span-2">
-                <CardHeader><CardTitle>Findings by Severity</CardTitle></CardHeader>
-                <SeverityDonut data={severityData} />
-              </Card>
-              <Card className="hud-panel">
-                <CardHeader><CardTitle>Recent Scans</CardTitle></CardHeader>
-                <RecentScans scans={scans || []} />
-              </Card>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <Card className="hud-panel lg:col-span-2">
-                <CardHeader>
-                  <CardTitle>Geographic Asset Distribution</CardTitle>
                 </CardHeader>
-                <GeoAssetMap assets={geoAssets || []} />
-              </Card>
-              <Card className="hud-panel">
-                <CardHeader><CardTitle>Risk Trend (Last 7 Days)</CardTitle></CardHeader>
-                <RiskTrendChart data={trend || []} />
+                <div className="p-6 relative z-10 flex-1">
+                  {topRisky && topRisky.length > 0 ? (
+                    <div className="space-y-4">
+                      {topRisky.map((a) => (
+                        <div key={a.id} className="flex items-center justify-between text-sm group cursor-default">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-ink font-medium transition-colors group-hover:text-primary">{a.hostname}</p>
+                            <p className="text-xs text-muted/70">{a.site || a.asset_type}</p>
+                          </div>
+                          <Badge label={a.risk_score >= 66 ? "critical" : a.risk_score >= 33 ? "high" : "low"} />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted/70 text-center mt-4">
+                      No risk-scored assets yet.
+                    </p>
+                  )}
+                </div>
               </Card>
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <Card className="hud-panel">
-                <CardHeader><CardTitle>Remediation Progress</CardTitle></CardHeader>
-                <div className="mb-2 h-3 w-full overflow-hidden rounded-full bg-surface-hover border border-primary/20">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-primary to-secondary shadow-neon"
-                    style={{ width: `${summary.remediation_progress_percent}%` }}
-                  />
+              <Card className="premium-card lg:col-span-2">
+                <div className="premium-card-inner"></div>
+                <CardHeader className="relative z-10 border-b border-white/5 bg-surface/30"><CardTitle className="text-sm font-medium text-muted">Findings by Severity</CardTitle></CardHeader>
+                <div className="relative z-10 p-2"><SeverityDonut data={severityData} /></div>
+              </Card>
+              <Card className="premium-card">
+                <div className="premium-card-inner"></div>
+                <CardHeader className="relative z-10 border-b border-white/5 bg-surface/30"><CardTitle className="text-sm font-medium text-muted">Recent Scans</CardTitle></CardHeader>
+                <div className="relative z-10"><RecentScans scans={scans || []} /></div>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <Card className="premium-card lg:col-span-2">
+                <div className="premium-card-inner"></div>
+                <CardHeader className="relative z-10 border-b border-white/5 bg-surface/30"><CardTitle className="text-sm font-medium text-muted">Geographic Asset Distribution</CardTitle></CardHeader>
+                <div className="relative z-10"><GeoAssetMap assets={geoAssets || []} /></div>
+              </Card>
+              <Card className="premium-card">
+                <div className="premium-card-inner"></div>
+                <CardHeader className="relative z-10 border-b border-white/5 bg-surface/30"><CardTitle className="text-sm font-medium text-muted">Risk Trend (Last 7 Days)</CardTitle></CardHeader>
+                <div className="relative z-10 p-2"><RiskTrendChart data={trend || []} /></div>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <Card className="premium-card flex flex-col">
+                <div className="premium-card-inner"></div>
+                <CardHeader className="relative z-10 border-b border-white/5 bg-surface/30"><CardTitle className="text-sm font-medium text-muted">Remediation Progress</CardTitle></CardHeader>
+                <div className="p-6 relative z-10 flex flex-col justify-center flex-1">
+                  <div className="mb-4 h-2 w-full overflow-hidden rounded-full bg-surface-hover shadow-inner">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-primary to-secondary transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(124,58,237,0.5)]"
+                      style={{ width: `${summary.remediation_progress_percent}%` }}
+                    />
+                  </div>
+                  <p className="text-3xl font-bold text-ink tracking-tight">{summary.remediation_progress_percent}% <span className="text-sm text-muted font-normal tracking-normal ml-1">remediated</span></p>
                 </div>
-                <p className="text-sm font-semibold neon-text text-primary">{summary.remediation_progress_percent}% <span className="text-muted font-normal">of all findings remediated</span></p>
               </Card>
 
-              <Card className="hud-panel lg:col-span-2">
-                <CardHeader><CardTitle>Compliance Overview</CardTitle></CardHeader>
-                <ComplianceRings status={summary.compliance_status} />
+              <Card className="premium-card lg:col-span-2">
+                <div className="premium-card-inner"></div>
+                <CardHeader className="relative z-10 border-b border-white/5 bg-surface/30"><CardTitle className="text-sm font-medium text-muted">Compliance Overview</CardTitle></CardHeader>
+                <div className="relative z-10"><ComplianceRings status={summary.compliance_status} /></div>
               </Card>
             </div>
 
             {systemStatus && (
-              <Card className="hud-panel border-primary/50 shadow-neon">
-                <CardHeader><CardTitle className="neon-text text-primary flex items-center gap-2"><div className="h-2 w-2 bg-primary rounded-full animate-pulse-glow"/> System Status</CardTitle></CardHeader>
-                <SystemStatusWidget overallStatus={systemStatus.overall_status} components={systemStatus.components} />
+              <Card className="premium-card">
+                <div className="premium-card-inner"></div>
+                <CardHeader className="relative z-10 border-b border-white/5 bg-surface/30">
+                  <CardTitle className="text-sm font-medium text-muted flex items-center gap-2">
+                    <div className="h-2 w-2 bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse"/> System Status
+                  </CardTitle>
+                </CardHeader>
+                <div className="relative z-10"><SystemStatusWidget overallStatus={systemStatus.overall_status} components={systemStatus.components} /></div>
               </Card>
             )}
 
-            <Card className="hud-panel lg:col-span-3 border-secondary/40 shadow-[inset_0_0_20px_rgba(124,58,237,0.1)]">
-              <CardHeader className="border-b border-secondary/20"><CardTitle className="text-secondary neon-text flex items-center gap-2"><Activity size={18} className="animate-pulse-glow" /> Live Threat Activity Ticker</CardTitle></CardHeader>
-              <ActivityTicker />
+            <Card className="premium-card lg:col-span-3">
+              <div className="premium-card-inner"></div>
+              <CardHeader className="relative z-10 border-b border-white/5 bg-surface/30">
+                <CardTitle className="text-sm font-medium text-muted flex items-center gap-2">
+                  <Activity size={16} className="text-secondary" /> Live Threat Activity Ticker
+                </CardTitle>
+              </CardHeader>
+              <div className="relative z-10"><ActivityTicker /></div>
             </Card>
           </div>
         )}
@@ -255,27 +281,21 @@ function StatCard({
   label: string;
   value: string | number;
   accent: string;
-  sysCode?: string;
+  iconColor?: string;
 }) {
   return (
-    <Card className={`hud-panel relative group hover:border-primary/80 transition-colors bg-surface/90 p-4`}>
-      <div className="flex items-center justify-between gap-4 relative z-10">
-        <div>
-          <p className="text-[10px] tracking-widest uppercase text-primary font-mono mb-1">{sysCode || 'SYS:001'}</p>
-          <p className={`text-3xl font-bold tracking-tight font-mono neon-text ${accent}`}>{value}</p>
-          <p className="text-[10px] tracking-widest uppercase text-muted font-bold mt-1">{label}</p>
+    <Card className="premium-card p-5 hover:border-white/10 group cursor-default">
+      <div className="premium-card-inner"></div>
+      <div className="flex flex-col relative z-10 h-full">
+        <div className="flex items-start justify-between mb-4">
+          <div className={`p-2.5 rounded-xl border ${accent} transition-transform duration-300 group-hover:scale-110 shadow-sm`}>
+            <Icon size={18} className="opacity-90" />
+          </div>
         </div>
-        <div className={`p-3 border border-current shadow-[inset_0_0_10px_currentColor] transition-transform group-hover:scale-110 ${accent}`}>
-          <Icon size={22} className="animate-pulse-glow" />
+        <div className="mt-auto">
+          <p className="text-2xl font-bold tracking-tight text-ink mb-1">{value}</p>
+          <p className="text-xs font-medium text-muted">{label}</p>
         </div>
-      </div>
-      {/* Tech bar chart background */}
-      <div className={`absolute bottom-2 right-2 flex items-end gap-[2px] opacity-20 ${accent} z-0`}>
-        <div className="w-1.5 h-3 bg-current" />
-        <div className="w-1.5 h-6 bg-current" />
-        <div className="w-1.5 h-2 bg-current" />
-        <div className="w-1.5 h-8 bg-current" />
-        <div className="w-1.5 h-5 bg-current" />
       </div>
     </Card>
   );
