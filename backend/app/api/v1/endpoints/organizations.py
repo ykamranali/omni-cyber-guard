@@ -41,25 +41,30 @@ def update_branding(
     return org
 
 @router.patch("/current/settings", response_model=OrganizationOut)
-def update_settings(
-    payload: OrganizationSettingsUpdate,
+def update_current_organization_settings(
+    org_update: OrganizationSettingsUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission(Permission.MANAGE_ORGANIZATION)),
+    current_user: User = Depends(require_permission(Permission.MANAGE_ORGANIZATIONS)),
 ):
-    org = db.query(Organization).filter(Organization.id == current_user.organization_id).first()
+    """
+    Update enterprise settings for the current user's organization.
+    """
+    org = current_user.organization
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+
+    update_data = org_update.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
         setattr(org, field, value)
+
     db.commit()
     db.refresh(org)
     return org
 
-
-@router.post("/current/webhooks/test")
-def test_webhooks(
+@router.post("/current/webhooks/test", response_model=dict)
+def test_webhook(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission(Permission.MANAGE_ORGANIZATION)),
+    current_user: User = Depends(require_permission(Permission.MANAGE_ORGANIZATIONS)),
 ):
     from app.services.notifications import NotificationService
     
