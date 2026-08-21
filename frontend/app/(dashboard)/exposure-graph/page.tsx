@@ -1,24 +1,23 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { getAuthToken } from "@/lib/auth";
+import { useAuthStore } from "@/store/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useToast } from "@/hooks/use-toast";
 
 // Dynamically import ForceGraph2D since it requires the window object
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
 
 export default function ExposureGraphPage() {
-  const { toast } = useToast();
   const [graphData, setGraphData] = useState({ nodes: [], edges: [] });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const fgRef = useRef();
 
   const fetchGraphData = useCallback(async () => {
     try {
-      const token = getAuthToken();
+      const token = useAuthStore.getState().accessToken;
       if (!token) return;
 
       const res = await fetch("/api/v1/graph/", {
@@ -35,16 +34,13 @@ export default function ExposureGraphPage() {
       };
       
       setGraphData(formattedData);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Could not load exposure graph",
-        variant: "destructive",
-      });
+    } catch (err: any) {
+      console.error(err);
+      setError("Could not load exposure graph");
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     fetchGraphData();

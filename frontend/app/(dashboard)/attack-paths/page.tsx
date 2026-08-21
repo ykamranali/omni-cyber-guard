@@ -1,21 +1,19 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { getAuthToken } from "@/lib/auth";
+import { useAuthStore } from "@/store/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, ArrowRight } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function AttackPathsPage() {
-  const { toast } = useToast();
   const [paths, setPaths] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchPaths = useCallback(async () => {
     try {
-      const token = getAuthToken();
+      const token = useAuthStore.getState().accessToken;
       if (!token) return;
 
       const res = await fetch("/api/v1/attack-paths/", {
@@ -25,16 +23,13 @@ export default function AttackPathsPage() {
       if (!res.ok) throw new Error("Failed to fetch attack paths");
       const data = await res.json();
       setPaths(data);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Could not load attack paths",
-        variant: "destructive",
-      });
+    } catch (err: any) {
+      console.error(err);
+      setError("Could not load attack paths");
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     fetchPaths();
@@ -94,7 +89,7 @@ export default function AttackPathsPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <ScrollArea className="w-full whitespace-nowrap pb-4">
+                <div className="w-full whitespace-nowrap pb-4 overflow-x-auto">
                   <div className="flex items-center gap-3 py-4 min-w-max">
                     {path.path_nodes.map((node: any, nIdx: number) => (
                       <div key={nIdx} className="flex items-center gap-3">
@@ -117,7 +112,7 @@ export default function AttackPathsPage() {
                       </div>
                     ))}
                   </div>
-                </ScrollArea>
+                </div>
               </CardContent>
             </Card>
           ))
