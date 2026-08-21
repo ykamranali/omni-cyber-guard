@@ -1,19 +1,28 @@
 """
-Real network discovery + port/service scanning, backed by the `nmap`
-binary. This module intentionally supports discovery and service
-fingerprinting only — no exploit execution, no credential attacks, no
-payload delivery. It is designed exclusively for authorized scanning of
-networks the operator owns or is explicitly authorized to assess.
+Scan authorization and nmap result parsing.
 
-Hard safety guardrail: scans are only permitted against private (RFC1918)
-or loopback address ranges. Any request to scan a public IP range is
-rejected before a single packet is sent.
+Two responsibilities, both deliberately separate from process execution (which
+belongs to `app/scanners/nmap.py`):
+
+1. `validate_authorized_target` — the hard safety guardrail. Scans are only
+   permitted against private (RFC1918) or loopback IPv4 ranges within a size
+   cap. A request to scan a public range is rejected before any process is
+   started, so no packet is ever sent to an unauthorized target.
+
+2. `_parse_nmap_xml` — turns nmap's XML report into structured hosts, ports,
+   services and script results. It extracts only what nmap reported; where a
+   value is absent it stays absent rather than being inferred.
+
+This module supports discovery and service fingerprinting only. No exploit
+execution, no credential attacks, no payload delivery.
 """
 from __future__ import annotations
 
 import ipaddress
+import platform
 import shutil
 import subprocess
+import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from typing import Callable
@@ -21,6 +30,11 @@ from typing import Callable
 
 class ScanAuthorizationError(Exception):
     """Raised when a scan target is not an authorized private range."""
+
+
+class ScanCanceled(Exception):
+    """Raised when an operator cancelled a scan and the scanner process was
+    actually terminated as a result."""
 
 
 # Ports considered inherently risky to expose, with a short, generic,
@@ -42,7 +56,8 @@ RISKY_PORTS: dict[int, tuple[str, str]] = {
     27017: ("MongoDB", "Database service frequently found exposed with no authentication in the wild. Restrict to application servers only."),
 }
 
-MAX_SCAN_HOSTS = 1024  # caps target CIDR size (roughly a /22) to keep scans fast and bounded
+MAX_SCAN_HOSTS = 1024  # caps target CIDR size (roughly a /22)
+CANCEL_POLL_SECONDS = 3.0  # how often a running scan checks for a cancel request
 
 
 @dataclass
@@ -103,71 +118,6 @@ def validate_authorized_target(target_cidr: str) -> ipaddress.IPv4Network:
 def nmap_available() -> bool:
     return shutil.which("nmap") is not None
 
-
-def run_discovery_and_service_scan(
-    target_cidr: str, 
-    timeout_seconds: int = 600, 
-    progress_callback: Callable = None
-) -> list[ScannedHost]:
-    """
-    Runs `nmap -sV -F` against an authorized private CIDR range and streams the
-    stdout in real-time, then parses the XML output. Requires the `nmap` binary
-    to be installed.
-    """
-    network = validate_authorized_target(target_cidr)
-
-    if not nmap_available():
-        raise RuntimeError(
-            "The 'nmap' binary is not installed in this environment. "
-            "Install it (e.g. `apt-get install nmap`) or use the provided Docker image."
-        )
-
-    # We output XML to a file, and use normal stdout for streaming live progress
-    import tempfile
-    import os
-    
-    xml_fd, xml_path = tempfile.mkstemp(suffix=".xml")
-    os.close(xml_fd)
-    
-    # -v enables verbose mode so Nmap prints "Discovered open port" and "Discovered host" live
-    # -A enables OS detection, version detection, script scanning, and traceroute
-    cmd = ["nmap", "-A", "--script", "vuln,default", "-F", "-T4", "--max-retries", "1", "--host-timeout", "5m", "-v", "-oX", xml_path, str(network)]
-    
-    try:
-        proc = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        )
-        
-        stdout_lines = []
-        if progress_callback:
-            progress_callback(f"Starting scan on {target_cidr}...")
-            
-        for line in proc.stdout:
-            stdout_lines.append(line)
-            if progress_callback:
-                if "Discovered" in line or "Scanning" in line:
-                    progress_callback(line.strip())
-
-        proc.wait(timeout=timeout_seconds)
-        
-        if proc.returncode not in (0, 1):
-            stderr = proc.stderr.read()
-            raise RuntimeError(f"nmap scan failed (exit {proc.returncode}): {stderr.strip()[:2000]}")
-            
-        with open(xml_path, "r") as f:
-            xml_content = f.read()
-            
-        return _parse_nmap_xml(xml_content)
-        
-    except subprocess.TimeoutExpired as exc:
-        proc.kill()
-        raise RuntimeError(f"Scan of {target_cidr} timed out after {timeout_seconds}s.") from exc
-    finally:
-        if os.path.exists(xml_path):
-            os.remove(xml_path)
-
-
-import platform
 
 def get_arp_table() -> dict[str, str]:
     arp_map = {}

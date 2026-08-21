@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/auth";
+import { api } from "@/lib/api";
 import { BadgeDollarSign, Users, CreditCard, ShieldCheck, ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -11,14 +12,11 @@ export default function LicensingPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("http://localhost:8000/api/v1/organizations/current", {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-      .then(res => res.json())
-      .then(data => {
-        setOrg(data);
-        setLoading(false);
-      });
+    api
+      .get<any>("/organizations/current")
+      .then(setOrg)
+      .catch((error) => console.error("Failed to load organization", error))
+      .finally(() => setLoading(false));
   }, [token]);
 
   if (loading) {

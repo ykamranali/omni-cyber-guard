@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  push:
+    branches: ["master", "main", "phase-*"]
+  pull_request:
+    branches: ["master", "main"]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend — migrations and tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          # The cluster superuser. The application role is created below as a
+          # NOSUPERUSER role, because PostgreSQL exempts superusers from every
+          # row-level security policy — silently.
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: omni_cyber_guard_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d omni_cyber_guard_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://ocg_user:ocg_password@localhost:5432/omni_cyber_guard_test
+      TEST_DATABASE_URL: postgresql://ocg_user:ocg_password@localhost:5432/omni_cyber_guard_test
+      REDIS_URL: redis://localhost:6379/0
+      SECRET_KEY: ci-only-secret-not-used-in-any-deployment
+      ENVIRONMENT: test
+
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Create the non-superuser application role
+        # Tenant isolation is enforced by row-level security, which does not
+        # apply to superusers. Running the suite as one would make every RLS
+        # test pass vacuously.
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d omni_cyber_guard_test -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE ocg_user LOGIN PASSWORD 'ocg_password' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+          ALTER SCHEMA public OWNER TO ocg_user;
+          GRANT ALL ON SCHEMA public TO ocg_user;
+          SQL
+
+      - name: Install system scan tools
+        # nmap is installed so scanner-availability checks exercise the real
+        # probe rather than always taking the "not installed" branch.
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends nmap
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Verify the Alembic migration chain applies to an empty database
+        run: alembic upgrade head
+
+      - name: Verify migrations are reversible
+        run: |
+          alembic downgrade -1
+          alembic upgrade head
+
+      - name: Run tests
+        run: pytest -v --cov=app --cov-report=term-missing
+
+  frontend:
+    name: Frontend — lint and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
+        run: npm run build
+
+  no-fabricated-data:
+    name: No fabricated security data
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Assert no fabricated results in security-critical code
+        # This job is deliberately separate so the reason for a red build is
+        # unmistakable: something reintroduced manufactured security data.
+        run: pytest tests/test_no_fabricated_data.py tests/test_scan_request_validation.py -v

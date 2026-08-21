@@ -3,7 +3,8 @@
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Radar, Loader2, CheckCircle2, XCircle, Circle, ShieldAlert, Server, ChevronDown, ChevronUp, Trash2
+  AlertTriangle, Radar, Loader2, CheckCircle2, XCircle, Circle, ShieldAlert,
+  ShieldCheck, Server, ChevronDown, ChevronUp, Trash2,
 } from "lucide-react";
 
 import { Topbar } from "@/components/layout/topbar";
@@ -26,7 +27,7 @@ interface ScanJobOut {
   target_cidr: string;
   scan_type: string;
   engine: string;
-  status: "queued" | "running" | "completed" | "failed";
+  status: "queued" | "running" | "completed" | "failed" | "canceled";
   hosts_discovered: number;
   findings_generated: number;
   error_message: string | null;
@@ -40,7 +41,33 @@ const STATUS_META: Record<string, { icon: JSX.Element; label: string; color: str
   running: { icon: <Loader2 size={15} className="animate-spin" />, label: "Running", color: "text-primary" },
   queued: { icon: <Circle size={15} />, label: "Queued", color: "text-muted" },
   failed: { icon: <XCircle size={15} />, label: "Failed", color: "text-critical" },
+  canceled: { icon: <XCircle size={15} />, label: "Canceled", color: "text-muted" },
 };
+
+interface ScanEngine {
+  name: string;
+  adapter_version: string;
+  description: string;
+  capabilities: string[];
+  requires_credential: boolean;
+  available: boolean;
+  summary: string;
+  remediation: string;
+  tool_version: string | null;
+}
+
+interface CredentialSummary {
+  id: string;
+  name: string;
+  credential_type: string;
+  username: string;
+}
+
+interface AuthorizationCheck {
+  authorized: boolean;
+  matched_network: { id: string; name: string; cidr: string } | null;
+  message: string;
+}
 
 export default function ScanCenterPage() {
   const queryClient = useQueryClient();
@@ -48,6 +75,8 @@ export default function ScanCenterPage() {
   const [engine, setEngine] = useState("nmap");
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [confirmedAuthorized, setConfirmedAuthorized] = useState(false);
+  const [credentialId, setCredentialId] = useState("");
 
   const { data: scans, isLoading, isError } = useQuery({
     queryKey: ["scans"],
@@ -56,9 +85,49 @@ export default function ScanCenterPage() {
       (query.state.data || []).some((s) => s.status === "queued" || s.status === "running") ? 3000 : false,
   });
 
+  /**
+   * Engine availability comes from the adapters themselves. Each one probes for
+   * its own binary or library, so an engine whose tool is missing is disabled
+   * here with the command that installs it — rather than being offered and
+   * failing, or appearing to run and producing nothing.
+   */
+  const { data: engineReport } = useQuery({
+    queryKey: ["scan-engines"],
+    queryFn: () => api.get<{ engines: ScanEngine[] }>("/scans/engines"),
+  });
+  const engines = engineReport?.engines ?? [];
+  const selectedEngine = engines.find((e) => e.name === engine);
+
+  const { data: credentials = [] } = useQuery({
+    queryKey: ["credentials"],
+    queryFn: () => api.get<CredentialSummary[]>("/credentials"),
+    // Only organization administrators may enumerate credentials; a 403 here is
+    // expected for other roles and simply means no picker is shown.
+    retry: false,
+    throwOnError: false,
+  });
+
   const { data: schedules, isLoading: isLoadingSchedules } = useQuery({
     queryKey: ["schedules"],
     queryFn: () => api.get<ScanScheduleOut[]>("/schedules"),
+  });
+
+  /**
+   * Ask the backend whether this target falls inside a range someone declared
+   * as authorized scope. The operator is told what the platform actually knows
+   * rather than being asked to tick a box with nothing behind it.
+   */
+  const trimmedTarget = cidr.trim();
+  const isNetworkTarget = /^[0-9.]+(\/\d{1,2})?$/.test(trimmedTarget);
+
+  const { data: authorization } = useQuery({
+    queryKey: ["scan-authorization", trimmedTarget],
+    queryFn: () =>
+      api.get<AuthorizationCheck>(
+        `/networks/authorization-check?target=${encodeURIComponent(trimmedTarget)}`
+      ),
+    enabled: isNetworkTarget && trimmedTarget.length >= 7,
+    retry: false,
   });
 
   const [selectedScanIds, setSelectedScanIds] = useState<Set<string>>(new Set());
@@ -85,7 +154,12 @@ export default function ScanCenterPage() {
   });
   
   const startScan = useMutation({
-    mutationFn: () => api.post<ScanJobOut>("/scans", { target_cidr: cidr, engine: engine }),
+    mutationFn: () =>
+      api.post<ScanJobOut>("/scans", {
+        target_cidr: cidr,
+        engine,
+        credential_profile_id: credentialId || null,
+      }),
     onSuccess: (job) => {
       queryClient.invalidateQueries({ queryKey: ["scans"] });
       setExpandedId(job.id);
@@ -162,31 +236,90 @@ export default function ScanCenterPage() {
           </CardHeader>
 
           <p className="mb-4 text-sm text-muted">
-            Choose your scanning engine. <strong>Nmap</strong> is used for fast host and port discovery. <strong>Nuclei</strong> provides fast, template-based vulnerability scanning. <strong>OWASP ZAP</strong> spiders and attacks web applications. <strong>OpenVAS</strong> performs deep, full-infrastructure vulnerability checks.
+            Each engine wraps a real tool and reports whether it can run on this worker.
+            An engine whose tool is missing is disabled below, with what to install.
           </p>
 
-          <div className="mb-6 grid grid-cols-2 gap-4">
-            {[
-              { id: "nmap", name: "Nmap Network Scanner", desc: "Fast port & service discovery." },
-              { id: "nuclei", name: "Nuclei Vulnerability Scanner", desc: "Fast, template-based vulnerability scanning." },
-              { id: "zap", name: "OWASP ZAP Web Scanner", desc: "Deep web application spidering & injection." },
-              { id: "openvas", name: "OpenVAS Infrastructure Scanner", desc: "Comprehensive CVE checks." },
-            ].map(eng => (
-              <div 
-                key={eng.id}
-                onClick={() => setEngine(eng.id)}
-                className={`p-4 rounded-xl border cursor-pointer transition-all ${engine === eng.id ? "border-primary bg-primary/10 shadow-neon" : "border-border bg-surface-hover/30 hover:border-primary/50"}`}
-              >
-                <div className="flex items-center gap-3">
-                  <Radar size={18} className={engine === eng.id ? "text-primary animate-pulse" : "text-muted"} />
-                  <div>
-                    <h4 className="text-sm font-bold text-ink">{eng.name}</h4>
-                    <p className="text-xs text-muted">{eng.desc}</p>
+          <div className="mb-4 grid gap-3 sm:grid-cols-2">
+            {engines.length === 0 && (
+              <p className="text-sm text-muted">Loading engines…</p>
+            )}
+            {engines.map((eng) => {
+              const selected = engine === eng.name;
+              return (
+                <button
+                  key={eng.name}
+                  type="button"
+                  onClick={() => eng.available && setEngine(eng.name)}
+                  disabled={!eng.available}
+                  className={`rounded-xl border p-4 text-left transition-all ${
+                    selected
+                      ? "border-primary bg-primary/10 shadow-neon"
+                      : eng.available
+                        ? "border-border bg-surface-hover/30 hover:border-primary/50"
+                        : "cursor-not-allowed border-border bg-surface opacity-60"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <Radar
+                      size={18}
+                      className={selected ? "mt-0.5 animate-pulse text-primary" : "mt-0.5 text-muted"}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-bold text-ink">{eng.name}</h4>
+                        {eng.requires_credential && (
+                          <span className="rounded border border-purple-500/40 bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-purple-400">
+                            credentialed
+                          </span>
+                        )}
+                        {!eng.available && (
+                          <span className="rounded border border-border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted">
+                            not configured
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted">{eng.description}</p>
+                      {eng.available ? (
+                        eng.tool_version && (
+                          <p className="mt-1 font-mono text-[10px] text-muted/70">{eng.tool_version}</p>
+                        )
+                      ) : (
+                        <p className="mt-1.5 text-[11px] leading-relaxed text-orange-400/90">
+                          {eng.summary} {eng.remediation}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
+                </button>
+              );
+            })}
           </div>
+
+          {selectedEngine?.requires_credential && (
+            <div className="mb-4 rounded-xl border border-purple-500/30 bg-purple-500/5 p-4">
+              <label className="mb-1.5 block text-xs font-medium text-ink">
+                Credential profile
+              </label>
+              <select
+                value={credentialId}
+                onChange={(e) => setCredentialId(e.target.value)}
+                className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink focus:border-primary focus:outline-none"
+              >
+                <option value="">Select a credential…</option>
+                {credentials.map((credential) => (
+                  <option key={credential.id} value={credential.id}>
+                    {credential.name} ({credential.username || credential.credential_type})
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
+                {credentials.length === 0
+                  ? "No credentials available to you. An organization administrator can add one under Administration → Credentials."
+                  : "The secret is decrypted once, at scan time, and the access is written to the audit log with this target."}
+              </p>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
             <div className="min-w-[240px] flex-1">
@@ -195,13 +328,66 @@ export default function ScanCenterPage() {
                 required
                 placeholder="e.g. 192.168.1.0/24 or https://target.local"
                 value={cidr}
-                onChange={(e) => setCidr(e.target.value)}
+                onChange={(e) => {
+                  setCidr(e.target.value);
+                  setConfirmedAuthorized(false);
+                }}
               />
             </div>
-            <Button type="submit" disabled={startScan.isPending}>
+            <Button
+              type="submit"
+              disabled={
+                startScan.isPending ||
+                !confirmedAuthorized ||
+                !selectedEngine?.available ||
+                (selectedEngine?.requires_credential === true && !credentialId)
+              }
+            >
               {startScan.isPending ? "Starting…" : "Start Scan"}
             </Button>
           </form>
+
+          {trimmedTarget.length >= 7 && (
+            <div
+              className={`mt-4 flex gap-3 rounded-xl border p-4 ${
+                authorization?.authorized
+                  ? "border-green-500/30 bg-green-500/5"
+                  : "border-orange-500/30 bg-orange-500/5"
+              }`}
+            >
+              {authorization?.authorized ? (
+                <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-green-500" />
+              ) : (
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-orange-500" />
+              )}
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-ink">
+                  You are about to assess <span className="font-mono">{trimmedTarget}</span>
+                </p>
+                <p className="text-sm leading-relaxed text-muted">
+                  {authorization
+                    ? authorization.message
+                    : isNetworkTarget
+                      ? "Checking this target against your declared networks…"
+                      : "This target is not an IP range, so it cannot be matched against your declared networks."}
+                </p>
+                <label className="flex cursor-pointer items-start gap-2.5 pt-1">
+                  <input
+                    type="checkbox"
+                    checked={confirmedAuthorized}
+                    onChange={(e) => setConfirmedAuthorized(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span className="text-sm text-ink/90">
+                    I confirm I am authorized to assess this target.
+                    <span className="mt-0.5 block text-xs text-muted">
+                      Recorded against your account in the audit log.
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </div>
+          )}
           {error && (
             <p className="mt-3 rounded-lg border border-critical/30 bg-critical/10 px-3 py-2 text-sm text-critical">
               {error}
@@ -391,6 +577,11 @@ export default function ScanCenterPage() {
                         {s.status === "failed" && (
                           <div className="text-sm text-critical">
                             {s.error_message || "The scan failed for an unknown reason."}
+                          </div>
+                        )}
+                        {s.status === "canceled" && (
+                          <div className="text-sm text-muted">
+                            {s.error_message || "This scan was canceled by an operator."}
                           </div>
                         )}
                         {(s.status === "queued" || s.status === "running" || s.status === "completed") && (

@@ -2,9 +2,17 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Topbar } from "@/components/layout/topbar";
-import { BrainCircuit, Activity, AlertTriangle, ShieldCheck, Crosshair } from "lucide-react";
+import { Activity, AlertTriangle, BrainCircuit, Crosshair, ShieldCheck } from "lucide-react";
 import { api } from "@/lib/api";
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+interface InsightEvidence {
+  finding_ids?: string[];
+  finding_titles?: string[];
+  event_ids?: string[];
+  event_titles?: string[];
+  affected_asset_count?: number;
+}
 
 interface Insight {
   id: string;
@@ -12,102 +20,138 @@ interface Insight {
   title: string;
   description: string;
   asset_ip?: string;
-  confidence_score: number;
+  evidence: InsightEvidence;
 }
 
+/**
+ * Correlated intelligence.
+ *
+ * Every insight below names the findings and observed events it was derived
+ * from. The previous version displayed an invented "Confidence: 98%" badge on
+ * each card and always rendered a reassuring "Posture is Optimal" entry when
+ * nothing correlated — neither number nor conclusion was computed from data.
+ */
 export default function IntelligencePage() {
   const { data: insights = [], isLoading } = useQuery({
     queryKey: ["insights"],
-    queryFn: () => api.get<Insight[]>("/intelligence/insights")
+    queryFn: () => api.get<Insight[]>("/intelligence/insights"),
   });
 
-  const targetedAssets = insights.filter(i => i.asset_ip).map(i => ({ ip: i.asset_ip, risk: i.confidence_score }));
+  const correlatedAssets = insights
+    .filter((insight) => insight.asset_ip)
+    .map((insight) => ({
+      ip: insight.asset_ip as string,
+      findings: insight.evidence?.finding_ids?.length ?? 0,
+      events: insight.evidence?.event_ids?.length ?? 0,
+    }));
 
   return (
     <>
       <Topbar title="Security Intelligence" />
       <main className="flex-1 space-y-6 overflow-y-auto p-6">
         <div>
-          <h1 className="text-2xl font-bold text-ink">Automated Security Intelligence</h1>
-          <p className="text-sm text-muted">Heuristic analysis correlating real-time threats with known asset vulnerabilities.</p>
+          <h1 className="text-2xl font-bold text-ink">Correlated Intelligence</h1>
+          <p className="text-sm text-muted">
+            Correlations between open findings and events observed by the passive monitor. Each
+            insight lists the records it was derived from.
+          </p>
         </div>
 
         <div className="grid gap-6 md:grid-cols-3">
-          <div className="circuit-panel p-6 col-span-2">
-            <h3 className="font-semibold text-primary neon-text flex items-center gap-2 mb-4 text-lg">
-              <BrainCircuit className="text-primary h-6 w-6 animate-pulse-glow" /> Heuristic Insights Engine
+          <div className="circuit-panel col-span-full p-6 md:col-span-2">
+            <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold text-primary neon-text">
+              <BrainCircuit className="h-6 w-6 animate-pulse-glow text-primary" /> Correlation engine
             </h3>
-            <div className="space-y-4">
-              {isLoading ? (
-                <div className="text-muted p-8 text-center animate-pulse">Running heuristic correlation engine...</div>
-              ) : insights.length === 0 ? (
-                <div className="text-muted p-8 text-center">No insights available at this time.</div>
-              ) : (
-                <div className="relative border-l-2 border-primary/30 pl-8 ml-4 space-y-6">
-                  {insights.map((insight) => (
-                    <div key={insight.id} className="relative p-4 circuit-panel flex gap-4 hover:border-primary/80 transition-colors bg-surface/90">
-                      {/* Circuit trace line connecting to main bus */}
-                      <div className="absolute -left-8 top-1/2 w-8 h-[2px] bg-primary/40">
-                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-1 bg-primary rounded-full shadow-neon" />
-                      </div>
-                      
-                      <div className="mt-1 flex-shrink-0 p-2 border border-current shadow-[inset_0_0_10px_currentColor]">
-                      {insight.type === "critical" ? <AlertTriangle className="h-6 w-6 text-red-500 animate-pulse-glow" /> :
-                       insight.type === "warning" ? <Activity className="h-6 w-6 text-orange-500 animate-pulse-glow" /> :
-                       <ShieldCheck className="h-6 w-6 text-blue-500 animate-pulse-glow" />}
+
+            {isLoading ? (
+              <div className="animate-pulse p-8 text-center text-muted">Correlating findings with observed events…</div>
+            ) : insights.length === 0 ? (
+              <div className="space-y-2 p-8 text-center">
+                <ShieldCheck className="mx-auto h-10 w-10 text-muted/50" />
+                <p className="text-sm text-ink/80">No correlations found</p>
+                <p className="mx-auto max-w-md text-xs leading-relaxed text-muted">
+                  Nothing in the current findings matched anything the passive monitor observed.
+                  This is not an assessment of your security posture — it means there was nothing
+                  to correlate.
+                </p>
+              </div>
+            ) : (
+              <div className="relative ml-4 space-y-6 border-l-2 border-primary/30 pl-8">
+                {insights.map((insight) => (
+                  <div
+                    key={insight.id}
+                    className="circuit-panel relative flex gap-4 bg-surface/90 p-4 transition-colors hover:border-primary/80"
+                  >
+                    <div className="absolute -left-8 top-1/2 h-[2px] w-8 bg-primary/40">
+                      <div className="absolute left-0 top-1/2 h-1 w-1 -translate-y-1/2 rounded-full bg-primary shadow-neon" />
                     </div>
-                    <div className="flex-1">
-                      <div className="flex justify-between items-start">
-                        <h4 className="font-semibold text-ink">{insight.title}</h4>
-                        <span className="text-xs font-mono text-muted bg-surface border border-border px-2 py-1 rounded">
-                          Confidence: {insight.confidence_score}%
-                        </span>
-                      </div>
-                      <p className="text-sm text-ink/80 mt-1">{insight.description}</p>
-                      
-                      {insight.type === "critical" && (
-                         <div className="mt-3 flex gap-2">
-                           <Button size="sm" variant="danger" className="h-7 text-xs">Isolate Asset</Button>
-                           <Button size="sm" variant="outline" className="h-7 text-xs">Create Incident</Button>
-                         </div>
+
+                    <div className="mt-1 flex-shrink-0 border border-current p-2 shadow-[inset_0_0_10px_currentColor]">
+                      {insight.type === "critical" ? (
+                        <AlertTriangle className="h-6 w-6 animate-pulse-glow text-red-500" />
+                      ) : insight.type === "warning" ? (
+                        <Activity className="h-6 w-6 animate-pulse-glow text-orange-500" />
+                      ) : (
+                        <ShieldCheck className="h-6 w-6 animate-pulse-glow text-blue-500" />
                       )}
                     </div>
+
+                    <div className="min-w-0 flex-1">
+                      <h4 className="font-semibold text-ink">{insight.title}</h4>
+                      <p className="mt-1 text-sm text-ink/80">{insight.description}</p>
+
+                      <div className="mt-3 rounded-lg border border-border/60 bg-surface p-3">
+                        <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted">Evidence</p>
+                        <ul className="space-y-1 text-xs text-muted">
+                          {insight.evidence?.finding_titles?.map((title, i) => (
+                            <li key={`f-${i}`} className="truncate">
+                              <span className="font-mono text-primary/70">finding</span> {title}
+                            </li>
+                          ))}
+                          {insight.evidence?.event_titles?.map((title, i) => (
+                            <li key={`e-${i}`} className="truncate">
+                              <span className="font-mono text-orange-400/80">event</span> {title}
+                            </li>
+                          ))}
+                          {insight.evidence?.affected_asset_count !== undefined && (
+                            <li>
+                              <span className="font-mono text-primary/70">assets affected</span>{" "}
+                              {insight.evidence.affected_asset_count}
+                            </li>
+                          )}
+                        </ul>
+                      </div>
+                    </div>
                   </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="space-y-6">
             <div className="network-lightning-bg circuit-panel p-6">
-              <h3 className="font-semibold text-red-500 neon-text-critical flex items-center gap-2 mb-2 text-lg relative z-10">
-                <Crosshair className="text-red-500 h-6 w-6 animate-pulse-glow" /> Top Targeted Assets
+              <h3 className="relative z-10 mb-2 flex items-center gap-2 text-lg font-semibold text-red-500 neon-text-critical">
+                <Crosshair className="h-6 w-6 animate-pulse-glow text-red-500" /> Correlated assets
               </h3>
-              <p className="text-xs text-muted mb-4 uppercase tracking-widest font-bold">Assets with the highest combination of severity and active network probing.</p>
-              
+              <p className="mb-4 text-xs font-bold uppercase tracking-widest text-muted">
+                Assets with open severe findings that also appear in observed network activity.
+              </p>
+
               <div className="space-y-3">
-                {targetedAssets.length === 0 ? (
-                   <div className="text-muted text-sm italic">No actively targeted vulnerable assets detected.</div>
+                {correlatedAssets.length === 0 ? (
+                  <div className="text-sm italic text-muted">No assets matched both criteria.</div>
                 ) : (
-                  targetedAssets.map((asset, i) => (
-                    <div key={i} className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
+                  correlatedAssets.map((asset) => (
+                    <div key={asset.ip} className="flex items-center justify-between border-b border-border/50 pb-2 text-sm">
                       <span className="font-mono font-medium">{asset.ip}</span>
-                      <span className="text-red-500 font-bold bg-red-500/10 px-2 rounded-full">Risk: {asset.risk}</span>
+                      <span className={cn("rounded-full bg-red-500/10 px-2 font-bold text-red-500")}>
+                        {asset.findings} finding{asset.findings === 1 ? "" : "s"} · {asset.events} event
+                        {asset.events === 1 ? "" : "s"}
+                      </span>
                     </div>
                   ))
                 )}
               </div>
-            </div>
-
-            <div className="network-lightning-bg circuit-panel border-primary shadow-neon p-6 relative overflow-hidden">
-               <div className="absolute inset-0 bg-primary/20 h-full w-full animate-satellite-beam opacity-20 pointer-events-none mix-blend-screen" />
-               <h3 className="font-bold text-primary neon-text mb-2 text-lg relative z-10">Engine Status</h3>
-               <p className="text-sm text-ink/80 relative z-10">The Heuristic Engine is currently running and actively correlating live network events against open asset vulnerabilities.</p>
-               <div className="mt-4 flex items-center gap-2 text-xs font-bold text-green-500 bg-green-500/10 px-3 py-1.5 rounded-md w-fit border border-green-500/50 shadow-[0_0_10px_#22C55E] relative z-10 tracking-wider">
-                 <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse-glow shadow-[0_0_5px_#22C55E]" />
-                 FULLY OPERATIONAL
-               </div>
             </div>
           </div>
         </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/auth";
+import { api } from "@/lib/api";
 import { ScrollText, Search, User, Monitor, Clock, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import { motion } from "framer-motion";
@@ -25,14 +26,11 @@ export default function AuditLogsPage() {
   const token = useAuthStore((s) => s.accessToken);
 
   useEffect(() => {
-    fetch("http://localhost:8000/api/v1/audit-logs", {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        setLogs(data.items);
-        setLoading(false);
-      });
+    api
+      .get<{ items: AuditLog[] }>("/audit-logs")
+      .then((data) => setLogs(data.items ?? []))
+      .catch((error) => console.error("Failed to load audit logs", error))
+      .finally(() => setLoading(false));
   }, [token]);
 
   const filteredLogs = logs.filter((l) => 

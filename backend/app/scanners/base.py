@@ -1,47 +1,37 @@
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Any, Callable
+"""
+Compatibility shim.
 
-@dataclass
-class ScannerResult:
-    target: str
-    scanner_name: str
-    findings: list[dict[str, Any]]
-    raw_data: Any = None
-    hosts_discovered: int = 0
-    findings_generated: int = 0
+The scanner interface now lives in `app/scanners/contract.py`, which defines the
+full lifecycle the platform needs (configuration probing, session start/status/
+cancel, and normalization). This module re-exports the names the old two-method
+interface used so existing imports keep working.
 
-class Scanner(ABC):
-    """
-    Base interface for all security scanners in the Omni Cyber Guard platform.
-    """
+New adapters should import from `app.scanners.contract` directly.
+"""
+from app.scanners.contract import (  # noqa: F401
+    ConfigurationStatus,
+    NormalizedFinding,
+    ScanProgress,
+    ScanRequest,
+    ScanSession,
+    ScannerAdapter,
+    ScannerAdapter as Scanner,
+    ScannerCapability,
+    ScannerResult,
+    SessionState,
+    TargetValidation,
+)
 
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """Name of the scanner (e.g., 'nmap', 'nuclei')."""
-        pass
-
-    @property
-    @abstractmethod
-    def version(self) -> str:
-        """Version of the scanner integration."""
-        pass
-
-    @abstractmethod
-    def is_available(self) -> bool:
-        """Check if the underlying tool is installed and available."""
-        pass
-
-    @abstractmethod
-    def validate_target(self, target: str) -> bool:
-        """Validate if the target is acceptable for this scanner."""
-        pass
-
-    @abstractmethod
-    def execute(self, target: str, progress_callback: Callable[[str], None] = None, **kwargs) -> ScannerResult:
-        """
-        Execute the scan against the target.
-        Must return a normalized ScannerResult.
-        """
-        pass
+__all__ = [
+    "Scanner",
+    "ScannerAdapter",
+    "ScannerResult",
+    "ScannerCapability",
+    "ScanRequest",
+    "ScanSession",
+    "ScanProgress",
+    "SessionState",
+    "ConfigurationStatus",
+    "TargetValidation",
+    "NormalizedFinding",
+]

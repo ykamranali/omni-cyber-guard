@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { FileCheck2, Loader2, ShieldCheck, AlertTriangle, ArrowRight } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
+import { api } from "@/lib/api";
 import { motion } from "framer-motion";
 
 interface Framework {
@@ -19,13 +20,7 @@ export default function CompliancePage() {
   useEffect(() => {
     async function fetchFrameworks() {
       try {
-        const res = await fetch("http://localhost:8000/api/v1/compliance/frameworks", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setFrameworks(data);
-        }
+        setFrameworks(await api.get<Framework[]>("/compliance/frameworks"));
       } catch (error) {
         console.error("Failed to fetch compliance frameworks", error);
       } finally {

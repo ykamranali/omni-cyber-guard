@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Send, User, BrainCircuit, Loader2 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
+import { api } from "@/lib/api";
 
 type Message = {
   id: string;
@@ -41,17 +42,9 @@ export default function AskAgentPage() {
     setIsLoading(true);
 
     try {
-      const res = await fetch("http://localhost:8000/api/v1/agent/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ message: userMsg.content }),
+      const data = await api.post<{ response: string }>("/agent/chat", {
+        message: userMsg.content,
       });
-
-      if (!res.ok) throw new Error("Failed to get response");
-      const data = await res.json();
       
       const agentMsg: Message = {
         id: (Date.now() + 1).toString(),

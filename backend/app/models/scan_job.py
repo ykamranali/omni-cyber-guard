@@ -1,6 +1,6 @@
 import uuid
 from enum import Enum as PyEnum
-from sqlalchemy import String, ForeignKey, Enum, Text, Integer
+from sqlalchemy import String, ForeignKey, Enum, Text, Integer, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -13,6 +13,7 @@ class ScanStatus(str, PyEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELED = "canceled"
 
 
 class ScanType(str, PyEnum):
@@ -34,11 +35,22 @@ class ScanJob(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     initiated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    # Credential used for an authenticated assessment, if any. Only the
+    # reference is stored here; the secret stays in the vault and is decrypted
+    # once, at scan time, with an audit record naming this job.
+    credential_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("credential_profiles.id", ondelete="SET NULL"), nullable=True
+    )
 
     target_cidr: Mapped[str] = mapped_column(String(64), nullable=False)
     scan_type: Mapped[ScanType] = mapped_column(Enum(ScanType), default=ScanType.PORT_SERVICE_SCAN)
     engine: Mapped[str] = mapped_column(String(32), default="nmap", server_default="nmap")
     status: Mapped[ScanStatus] = mapped_column(Enum(ScanStatus), default=ScanStatus.QUEUED)
+
+    # Set by the cancel endpoint; polled by the worker, which terminates the
+    # running scanner subprocess. A cancelled scan reports CANCELED, never
+    # COMPLETED and never FAILED.
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     hosts_discovered: Mapped[int] = mapped_column(Integer, default=0)
     findings_generated: Mapped[int] = mapped_column(Integer, default=0)

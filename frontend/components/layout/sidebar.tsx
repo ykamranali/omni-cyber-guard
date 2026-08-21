@@ -3,105 +3,212 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Server, ShieldAlert, FileCheck2, FileBarChart2,
-  Settings, ShieldCheck, Users, Building2, ScrollText, BadgeDollarSign, Radar, Satellite, BrainCircuit
+  Activity, BadgeDollarSign, BrainCircuit, Building2, Cloud, DatabaseZap, FileBarChart2,
+  FileCheck2, Fingerprint, Globe, KeyRound, LayoutDashboard, Network, Radar,
+  ScrollText, Server, Settings, ShieldAlert, ShieldCheck, Share2, Satellite,
+  Users, Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth";
 
-const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, enabled: true },
-  { href: "/ask-agent", label: "Ask Omni Agent", icon: BrainCircuit, enabled: true },
-  { href: "/assets", label: "Assets", icon: Server, enabled: true },
-  { href: "/scans", label: "Scan Center", icon: Radar, enabled: true, requires: "scans" as const },
-  { href: "/vulnerabilities", label: "Vulnerabilities", icon: ShieldAlert, enabled: true },
-  { href: "/compliance", label: "Compliance", icon: FileCheck2, enabled: true },
-  { href: "/reports", label: "Reports", icon: FileBarChart2, enabled: true },
-  { href: "/threat-intelligence", label: "Threat Intelligence", icon: Satellite, enabled: true },
-  { href: "/intelligence", label: "Automated Intelligence", icon: BrainCircuit, enabled: true },
-  { href: "/incidents", label: "Incident Response", icon: ShieldAlert, enabled: true },
-  { href: "/infrastructure", label: "Infrastructure Protection", icon: ShieldCheck, enabled: true },
-  { href: "/users", label: "Users", icon: Users, enabled: true, requires: "users" as const },
-  { href: "/organizations", label: "Organizations", icon: Building2, enabled: true, requires: "super_admin" as const },
-  { href: "/settings", label: "Settings", icon: Settings, enabled: true },
-  { href: "/audit-logs", label: "Audit Logs", icon: ScrollText, enabled: true },
-  { href: "/licensing", label: "Licensing", icon: BadgeDollarSign, enabled: true },
+type Requirement = "super_admin" | "users" | "scans" | "credentials";
+
+interface NavItem {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  /**
+   * `false` means the module is not built yet. It renders as a disabled row
+   * rather than a link to a page that would only look functional.
+   */
+  built: boolean;
+  requires?: Requirement;
+}
+
+interface NavGroup {
+  title: string;
+  items: NavItem[];
+}
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    title: "Overview",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, built: true },
+      { href: "/exposure", label: "Exposure Overview", icon: Activity, built: true },
+    ],
+  },
+  {
+    title: "Discovery",
+    items: [
+      { href: "/assets", label: "Assets", icon: Server, built: true },
+      { href: "/networks", label: "Sites & Networks", icon: Network, built: true },
+      { href: "/attack-surface", label: "Attack Surface", icon: Globe, built: false },
+      { href: "/cloud", label: "Cloud Assets", icon: Cloud, built: false },
+      { href: "/identity", label: "Identity", icon: Fingerprint, built: false },
+    ],
+  },
+  {
+    title: "Assessment",
+    items: [
+      { href: "/scans", label: "Scan Center", icon: Radar, built: true, requires: "scans" },
+      { href: "/vulnerabilities", label: "Findings", icon: ShieldAlert, built: true },
+      { href: "/compliance", label: "Compliance", icon: FileCheck2, built: true },
+    ],
+  },
+  {
+    title: "Exposure",
+    items: [
+      { href: "/exposure-graph", label: "Exposure Graph", icon: Share2, built: false },
+      { href: "/attack-paths", label: "Attack Paths", icon: Share2, built: false },
+    ],
+  },
+  {
+    title: "Intelligence",
+    items: [
+      { href: "/threat-intelligence", label: "Threat Intelligence", icon: Satellite, built: true },
+      { href: "/intelligence", label: "Correlated Intelligence", icon: BrainCircuit, built: true },
+      { href: "/cve-intelligence", label: "CVE Intelligence", icon: DatabaseZap, built: true },
+    ],
+  },
+  {
+    title: "Operations",
+    items: [
+      { href: "/remediation", label: "Remediation", icon: Wrench, built: true },
+      { href: "/incidents", label: "Incident Response", icon: ShieldAlert, built: true },
+      { href: "/infrastructure", label: "Infrastructure Protection", icon: ShieldCheck, built: true },
+      { href: "/ask-agent", label: "Ask Omni Agent", icon: BrainCircuit, built: true },
+    ],
+  },
+  {
+    title: "Reporting",
+    items: [
+      { href: "/reports", label: "Reports", icon: FileBarChart2, built: true },
+    ],
+  },
+  {
+    title: "Administration",
+    items: [
+      { href: "/organizations", label: "Organizations", icon: Building2, built: true, requires: "super_admin" },
+      { href: "/users", label: "Users", icon: Users, built: true, requires: "users" },
+      { href: "/credentials", label: "Credentials", icon: KeyRound, built: true, requires: "credentials" },
+      { href: "/settings", label: "Settings", icon: Settings, built: true },
+      { href: "/audit-logs", label: "Audit Logs", icon: ScrollText, built: true },
+      { href: "/licensing", label: "Licensing", icon: BadgeDollarSign, built: true },
+    ],
+  },
 ];
+
+/**
+ * Role gates below only hide navigation. Every request is authorized again on
+ * the backend, so hiding a link is a convenience, never the control.
+ */
+function isVisible(item: NavItem, user: ReturnType<typeof useAuthStore.getState>["user"]): boolean {
+  if (!item.requires) return true;
+  if (user?.is_super_admin) return true;
+
+  const roles = user?.roles ?? [];
+  switch (item.requires) {
+    case "super_admin":
+      return false;
+    case "users":
+      return roles.some((r) => ["organization_administrator", "security_manager"].includes(r));
+    case "credentials":
+      // MANAGE_API_KEYS in the backend RBAC defaults.
+      return roles.some((r) => r === "organization_administrator");
+    case "scans":
+      return roles.some((r) =>
+        ["organization_administrator", "security_manager", "security_analyst"].includes(r)
+      );
+    default:
+      return true;
+  }
+}
 
 export function Sidebar() {
   const pathname = usePathname();
   const user = useAuthStore((s) => s.user);
 
-  const visibleItems = NAV_ITEMS.filter((item) => {
-    if (item.requires === "super_admin") return !!user?.is_super_admin;
-    // "Users" management is shown to anyone whose role set isn't just read-only/auditor —
-    // the backend still enforces MANAGE_USERS on every request regardless of what's shown here.
-    if (item.requires === "users") {
-      return user?.is_super_admin || user?.roles?.some((r) => ["organization_administrator", "security_manager"].includes(r));
-    }
-    // Scan Center is shown to roles that hold RUN_SCANS in the backend RBAC defaults
-    // (organization_administrator, security_manager, security_analyst). The API still
-    // enforces the real permission on every request regardless of what's shown here.
-    if (item.requires === "scans") {
-      return (
-        user?.is_super_admin ||
-        user?.roles?.some((r) => ["organization_administrator", "security_manager", "security_analyst"].includes(r))
-      );
-    }
-    return true;
-  });
-
   return (
     <aside className="hidden w-64 flex-col border-r border-border bg-surface/40 backdrop-blur-xl md:flex">
-      <div className="flex h-20 items-center gap-3 border-b border-primary/20 bg-surface/20 px-5 shadow-[0_4px_20px_rgba(var(--color-primary)/0.1)] relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(var(--color-primary)/0.15),transparent_70%)] pointer-events-none" />
-        <div className="glossy-icon h-10 w-10 rounded-xl border border-primary/40 text-primary shadow-neon z-10">
+      <div className="relative flex h-20 items-center gap-3 overflow-hidden border-b border-primary/20 bg-surface/20 px-5 shadow-[0_4px_20px_rgba(var(--color-primary)/0.1)]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(var(--color-primary)/0.15),transparent_70%)]" />
+        <div className="glossy-icon z-10 h-10 w-10 rounded-xl border border-primary/40 text-primary shadow-neon">
           <ShieldCheck className="h-6 w-6" />
         </div>
         <div className="z-10">
-          <p className="text-[15px] font-bold tracking-wider text-ink neon-text uppercase">Omni Cyber Guard</p>
+          <p className="neon-text text-[15px] font-bold uppercase tracking-wider text-ink">
+            Omni Cyber Guard
+          </p>
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {visibleItems.map(({ href, label, icon: Icon, enabled }) => {
-          const active = pathname === href || pathname.startsWith(href + "/");
-
-          if (!enabled) {
-            return (
-              <div
-                key={href}
-                title="Coming in a future milestone"
-                className="flex cursor-not-allowed items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium text-muted"
-              >
-                <span className="flex items-center gap-3">
-                  <Icon size={17} />
-                  {label}
-                </span>
-                <span className="rounded-full border border-border px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-muted">
-                  Soon
-                </span>
-              </div>
-            );
-          }
+      <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
+        {NAV_GROUPS.map((group) => {
+          const items = group.items.filter((item) => isVisible(item, user));
+          if (items.length === 0) return null;
 
           return (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-300 group relative overflow-hidden",
-                active
-                  ? "bg-primary/15 text-primary border border-primary/50 shadow-[inset_0_0_20px_rgba(var(--color-primary)/0.3)] neon-pulse-border"
-                  : "text-ink/75 hover:bg-surface-hover hover:text-ink hover:translate-x-1 hover:shadow-[inset_0_0_10px_rgba(255,255,255,0.05)]"
-              )}
-            >
-              {active && <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-transparent pointer-events-none" />}
-              <div className={cn("p-1.5 rounded-lg transition-all duration-300 z-10", active ? "glossy-icon border border-primary shadow-[0_0_10px_rgba(var(--color-primary)/0.5)]" : "bg-surface group-hover:glossy-icon group-hover:shadow-[0_0_10px_rgba(255,255,255,0.1)]")}>
-                <Icon size={16} className={cn(active && "animate-pulse drop-shadow-md")} />
+            <div key={group.title}>
+              <p className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-[0.15em] text-muted/70">
+                {group.title}
+              </p>
+              <div className="space-y-0.5">
+                {items.map(({ href, label, icon: Icon, built }) => {
+                  const active = pathname === href || pathname.startsWith(href + "/");
+
+                  if (!built) {
+                    return (
+                      <div
+                        key={href}
+                        title="This module is not implemented yet"
+                        className="flex cursor-not-allowed items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-muted/50"
+                      >
+                        <span className="flex items-center gap-3">
+                          <span className="rounded-lg p-1.5">
+                            <Icon size={16} />
+                          </span>
+                          {label}
+                        </span>
+                        <span className="rounded-full border border-border px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-muted/60">
+                          Not built
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      className={cn(
+                        "group relative flex items-center gap-3 overflow-hidden rounded-lg px-3 py-2 text-sm font-medium transition-all duration-300",
+                        active
+                          ? "neon-pulse-border border border-primary/50 bg-primary/15 text-primary shadow-[inset_0_0_20px_rgba(var(--color-primary)/0.3)]"
+                          : "text-ink/75 hover:translate-x-1 hover:bg-surface-hover hover:text-ink"
+                      )}
+                    >
+                      {active && (
+                        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-primary/20 to-transparent" />
+                      )}
+                      <div
+                        className={cn(
+                          "z-10 rounded-lg p-1.5 transition-all duration-300",
+                          active
+                            ? "glossy-icon border border-primary shadow-[0_0_10px_rgba(var(--color-primary)/0.5)]"
+                            : "bg-surface group-hover:glossy-icon"
+                        )}
+                      >
+                        <Icon size={15} className={cn(active && "drop-shadow-md")} />
+                      </div>
+                      <span className={cn("z-10 tracking-wide", active && "neon-text font-bold")}>
+                        {label}
+                      </span>
+                    </Link>
+                  );
+                })}
               </div>
-              <span className={cn("tracking-wide z-10", active && "neon-text font-bold")}>{label}</span>
-            </Link>
+            </div>
           );
         })}
       </nav>

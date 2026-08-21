@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/auth";
-import { Save, CheckCircle2, Paintbrush, Bell, Shield, Loader2, Send } from "lucide-react";
+import { Save, CheckCircle2, Paintbrush, Bell, Shield, Loader2, Send, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Topbar } from "@/components/layout/topbar";
+import { api } from "@/lib/api";
 
 export default function SettingsPage() {
   const token = useAuthStore((s) => s.accessToken);
@@ -13,6 +14,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [testingWebhook, setTestingWebhook] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
     primary_color: "",
@@ -25,11 +27,9 @@ export default function SettingsPage() {
   });
 
   useEffect(() => {
-    fetch("http://localhost:8000/api/v1/organizations/current", {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-      .then(res => res.json())
-      .then(data => {
+    api
+      .get<any>("/organizations/current")
+      .then((data) => {
         setFormData({
           primary_color: data.primary_color || "#0EA5E9",
           secondary_color: data.secondary_color || "#7C3AED",
@@ -39,42 +39,38 @@ export default function SettingsPage() {
           sso_provider: data.sso_provider || "none",
           sso_metadata_url: data.sso_metadata_url || ""
         });
-        setLoading(false);
-      });
+      })
+      .catch((error) => console.error("Failed to load organization settings", error))
+      .finally(() => setLoading(false));
   }, [token]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setSuccess(false);
+    setSaveError(null);
 
     try {
-      // Patch Branding
+      // The previous version awaited fetch() without inspecting the response,
+      // so a 403 or 500 still rendered "Settings saved".
       if (activeTab === "branding") {
-        await fetch("http://localhost:8000/api/v1/organizations/current/branding", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            primary_color: formData.primary_color,
-            secondary_color: formData.secondary_color,
-            footer_text: formData.footer_text
-          })
+        await api.patch("/organizations/current/branding", {
+          primary_color: formData.primary_color,
+          secondary_color: formData.secondary_color,
+          footer_text: formData.footer_text
         });
       } else {
-        // Patch Settings
-        await fetch("http://localhost:8000/api/v1/organizations/current/settings", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            slack_webhook_url: formData.slack_webhook_url || null,
-            teams_webhook_url: formData.teams_webhook_url || null,
-            sso_provider: formData.sso_provider,
-            sso_metadata_url: formData.sso_metadata_url || null
-          })
+        await api.patch("/organizations/current/settings", {
+          slack_webhook_url: formData.slack_webhook_url || null,
+          teams_webhook_url: formData.teams_webhook_url || null,
+          sso_provider: formData.sso_provider,
+          sso_metadata_url: formData.sso_metadata_url || null
         });
       }
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Failed to save settings.");
     } finally {
       setSaving(false);
     }
@@ -83,18 +79,14 @@ export default function SettingsPage() {
   const handleTestWebhook = async () => {
     setTestingWebhook(true);
     try {
-      const res = await fetch("http://localhost:8000/api/v1/organizations/current/webhooks/test", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        alert("Test alert dispatched successfully!");
-      } else {
-        const error = await res.json();
-        alert(`Failed to send test alert: ${error.detail}`);
-      }
-    } catch (e) {
-      alert("Network error sending test alert.");
+      await api.post("/organizations/current/webhooks/test");
+      alert("Test alert dispatched successfully.");
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? `Failed to send test alert: ${error.message}`
+          : "Failed to send test alert."
+      );
     } finally {
       setTestingWebhook(false);
     }
@@ -304,6 +296,10 @@ export default function SettingsPage() {
                     {success ? (
                       <span className="flex items-center gap-2 text-sm font-bold text-green-500 animate-in fade-in duration-300">
                         <CheckCircle2 className="h-5 w-5 drop-shadow-[0_0_8px_rgba(34,197,94,0.5)]" /> Saved successfully!
+                      </span>
+                    ) : saveError ? (
+                      <span className="flex items-center gap-2 text-sm font-semibold text-critical">
+                        <AlertTriangle className="h-5 w-5" /> {saveError}
                       </span>
                     ) : <span />}
                     <button

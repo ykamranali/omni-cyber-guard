@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { useAuthStore } from "@/store/auth";
+import { WebSocketProvider } from "@/components/providers/websocket-provider";
 
 export default function DashboardShellLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -23,9 +24,11 @@ export default function DashboardShellLayout({ children }: { children: React.Rea
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-      <div className="flex flex-1 flex-col">{children}</div>
-    </div>
+    <WebSocketProvider>
+      <div className="flex min-h-screen bg-background">
+        <Sidebar />
+        <div className="flex flex-1 flex-col">{children}</div>
+      </div>
+    </WebSocketProvider>
   );
 }

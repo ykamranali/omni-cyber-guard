@@ -1,115 +1,127 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertCircle, ShieldAlert, Zap, Radio } from "lucide-react";
+import { AlertCircle, Radio, ShieldOff, Zap } from "lucide-react";
 import { api } from "@/lib/api";
 
 interface ActivityEvent {
-  id: string | number;
+  id: string;
   time: string;
   type: "threat" | "scan" | "defense" | "system";
   message: string;
 }
 
-const MOCK_SYSTEM_EVENTS = [
-  { type: "scan", message: "Nmap deep scan completed on subnet 10.0.0.0/24" },
-  { type: "system", message: "Node agent 0x8F synchronized with command center" },
-  { type: "defense", message: "Automated firewall rule applied: Blocked port 445" },
-  { type: "scan", message: "Scheduled OSINT reconnaissance initiated on primary domain" },
-  { type: "system", message: "Database backup completed successfully" },
-  { type: "defense", message: "Threat intelligence feed updated. 1,402 new signatures loaded." },
-];
+interface ThreatIntelResponse {
+  latest_advisories: {
+    id: string;
+    title: string;
+    description: string;
+    severity: string;
+    timestamp: string;
+  }[];
+  passive_monitor: { available: boolean; running: boolean };
+}
 
+/**
+ * Live activity feed.
+ *
+ * Shows only events the passive monitor actually observed. An earlier version
+ * injected a rotating list of invented events ("Automated firewall rule
+ * applied", "1,402 new signatures loaded") every few seconds so the panel
+ * always looked busy. Those were removed: a quiet network now reads as quiet,
+ * and an offline monitor says so.
+ */
 export function ActivityTicker() {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
+  const [monitorOffline, setMonitorOffline] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    // Initial fetch of real threat intel
-    const fetchRealThreats = async () => {
+    let cancelled = false;
+
+    const load = async () => {
       try {
-        const data = await api.get<{ latest_advisories: any[] }>("/threat-intel");
-        if (data.latest_advisories && data.latest_advisories.length > 0) {
-          const realThreats = data.latest_advisories.map((t) => ({
-            id: t.id || Math.random().toString(),
-            time: new Date(t.timestamp).toLocaleTimeString(),
+        const data = await api.get<ThreatIntelResponse>("/threat-intel");
+        if (cancelled) return;
+
+        setMonitorOffline(!data.passive_monitor?.running);
+        setEvents(
+          (data.latest_advisories ?? []).slice(0, 10).map((event) => ({
+            id: event.id,
+            time: new Date(event.timestamp).toLocaleTimeString(),
             type: "threat" as const,
-            message: `[${t.severity}] ${t.title} - ${t.description.substring(0, 50)}...`,
-          }));
-          setEvents(realThreats);
-        }
-      } catch (error) {
-        console.error("Failed to fetch threat intel for ticker", error);
+            message: `[${event.severity}] ${event.title} — ${event.description}`,
+          }))
+        );
+      } catch {
+        if (!cancelled) setMonitorOffline(true);
+      } finally {
+        if (!cancelled) setLoaded(true);
       }
     };
 
-    fetchRealThreats();
-
-    const interval = setInterval(() => {
-      const randomEvent = MOCK_SYSTEM_EVENTS[Math.floor(Math.random() * MOCK_SYSTEM_EVENTS.length)];
-      setEvents((prev) => [
-        {
-          id: Date.now(),
-          time: new Date().toLocaleTimeString(),
-          type: randomEvent.type as any,
-          message: randomEvent.message,
-        },
-        ...prev.slice(0, 9), // keep last 10
-      ]);
-    }, 4500);
-
-    return () => clearInterval(interval);
+    load();
+    const interval = setInterval(load, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
-  const getIcon = (type: string) => {
+  const iconFor = (type: string) => {
     switch (type) {
-      case "threat": return <AlertCircle size={14} className="text-critical" />;
-      case "scan": return <Radio size={14} className="text-primary" />;
-      case "defense": return <ShieldAlert size={14} className="text-green-400" />;
-      default: return <Zap size={14} className="text-muted" />;
+      case "threat":
+        return <AlertCircle size={14} className="text-critical" />;
+      case "scan":
+        return <Radio size={14} className="text-primary" />;
+      default:
+        return <Zap size={14} className="text-muted" />;
     }
   };
 
-  const getColor = (type: string) => {
+  const colorFor = (type: string) => {
     switch (type) {
-      case "threat": return "text-critical";
-      case "scan": return "text-primary";
-      case "defense": return "text-green-400";
-      default: return "text-muted";
+      case "threat":
+        return "text-critical";
+      case "scan":
+        return "text-primary";
+      default:
+        return "text-muted";
     }
   };
 
   return (
-    <div className="h-48 overflow-hidden p-4 flex flex-col gap-2 relative bg-surface/50">
-      <div className="absolute top-0 left-0 w-full h-8 bg-gradient-to-b from-surface/50 to-transparent z-10 pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-full h-8 bg-gradient-to-t from-surface/50 to-transparent z-10 pointer-events-none" />
-      
-      {events.map((ev, idx) => (
-        <div 
-          key={ev.id} 
-          className="flex items-center gap-3 text-xs border-l-2 border-border/50 pl-3 py-1 transition-all duration-500 ease-out"
-          style={{ 
-            opacity: 1 - (idx * 0.1),
-            transform: `translateY(${idx === 0 ? '-10px' : '0'})`,
-            animation: idx === 0 ? 'slideIn 0.5s ease-out forwards' : 'none'
-          }}
+    <div className="relative flex h-48 flex-col gap-2 overflow-hidden bg-surface/50 p-4">
+      <div className="pointer-events-none absolute left-0 top-0 z-10 h-8 w-full bg-gradient-to-b from-surface/50 to-transparent" />
+      <div className="pointer-events-none absolute bottom-0 left-0 z-10 h-8 w-full bg-gradient-to-t from-surface/50 to-transparent" />
+
+      {loaded && events.length === 0 && (
+        <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+          <ShieldOff size={20} className="text-muted/60" />
+          <p className="text-xs text-muted">
+            {monitorOffline
+              ? "Passive monitor is not running — no traffic is being observed."
+              : "No network events observed in the current window."}
+          </p>
+        </div>
+      )}
+
+      {events.map((event, index) => (
+        <div
+          key={event.id}
+          className="flex items-center gap-3 border-l-2 border-border/50 py-1 pl-3 text-xs transition-all duration-500 ease-out"
+          style={{ opacity: 1 - index * 0.08 }}
         >
-          <span className="font-mono text-muted/70 w-20">{ev.time}</span>
-          <div className="p-1 rounded bg-surface border border-border/50 shadow-glass">
-            {getIcon(ev.type)}
+          <span className="w-20 font-mono text-muted/70">{event.time}</span>
+          <div className="rounded border border-border/50 bg-surface p-1 shadow-glass">
+            {iconFor(event.type)}
           </div>
-          <span className={`font-mono uppercase tracking-wider font-semibold ${getColor(ev.type)}`}>
-            [{ev.type}]
+          <span className={`font-mono font-semibold uppercase tracking-wider ${colorFor(event.type)}`}>
+            [{event.type}]
           </span>
-          <span className="text-ink/80 truncate">{ev.message}</span>
+          <span className="truncate text-ink/80">{event.message}</span>
         </div>
       ))}
-
-      <style jsx>{`
-        @keyframes slideIn {
-          from { opacity: 0; transform: translateY(-10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
     </div>
   );
 }

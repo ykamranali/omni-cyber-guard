@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import String, Boolean
+from sqlalchemy import JSON, String, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -21,6 +21,16 @@ class Organization(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     primary_color: Mapped[str] = mapped_column(String(20), default="#0EA5E9")
     secondary_color: Mapped[str] = mapped_column(String(20), default="#7C3AED")
     footer_text: Mapped[str] = mapped_column(String(255), default="Powered by Omni Digital Solution")
+
+    # Exposure model weight overrides, keyed by contributor. Empty means the
+    # platform defaults apply. Kept per-organization because a healthcare estate
+    # may weight data sensitivity above internet exposure, and a public SaaS
+    # estate the reverse — there is no universally correct set.
+    exposure_model: Mapped[dict] = mapped_column(JSON, default=dict)
+
+    # Remediation SLA windows in days, keyed by severity. Empty means the
+    # platform defaults apply.
+    sla_policy: Mapped[dict] = mapped_column(JSON, default=dict)
 
     # Licensing
     subscription_plan: Mapped[str] = mapped_column(String(50), default="trial")

@@ -4,15 +4,20 @@ services:
     container_name: ocg-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ocg_user
-      POSTGRES_PASSWORD: ocg_password
+      # This is the cluster superuser, used for administration only.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:-postgres}
       POSTGRES_DB: omni_cyber_guard
     ports:
       - "5432:5432"
     volumes:
       - ocg_postgres_data:/var/lib/postgresql/data
+      # Creates the non-superuser application role. PostgreSQL exempts
+      # superusers from row-level security silently, so the application must
+      # never connect as one — see deploy/postgres-init/01-application-role.sql.
+      - ./deploy/postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ocg_user -d omni_cyber_guard"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d omni_cyber_guard"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -36,9 +41,12 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DATABASE_URL: postgresql://ocg_user:ocg_password@postgres:5432/omni_cyber_guard
+      DATABASE_URL: postgresql://ocg_app:ocg_password@postgres:5432/omni_cyber_guard
       REDIS_URL: redis://redis:6379/0
       OVERRIDE_LOCAL_IP: ${OVERRIDE_LOCAL_IP:-}
+      # Packet capture runs in the worker, which has CAP_NET_RAW. The API reads
+      # the events the worker recorded from Redis.
+      ENABLE_PASSIVE_MONITOR: "false"
     ports:
       - "8000:8000"
     depends_on:
@@ -46,9 +54,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    cap_add:
-      - NET_RAW
-      - NET_ADMIN
     volumes:
       - ./backend:/app
 
@@ -60,9 +65,10 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DATABASE_URL: postgresql://ocg_user:ocg_password@postgres:5432/omni_cyber_guard
+      DATABASE_URL: postgresql://ocg_app:ocg_password@postgres:5432/omni_cyber_guard
       REDIS_URL: redis://redis:6379/0
       OVERRIDE_LOCAL_IP: ${OVERRIDE_LOCAL_IP:-}
+      ENABLE_PASSIVE_MONITOR: "true"
     depends_on:
       postgres:
         condition: service_healthy

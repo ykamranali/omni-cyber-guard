@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Satellite, ShieldAlert, Activity, Search, Shield, AlertTriangle } from "lucide-react";
+import { Satellite, ShieldAlert, Activity, Search, Shield, AlertTriangle, DatabaseZap } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
@@ -17,12 +17,39 @@ interface ThreatEvent {
   tags: string[];
 }
 
+interface PassiveMonitor {
+  available: boolean;
+  running: boolean;
+  events_in_window: number;
+}
+
+interface CatalogueEntry {
+  id: string;
+  title: string;
+  description: string;
+  severity: string;
+  cvss: number | null;
+  epss: number | null;
+  known_exploited: boolean;
+  timestamp: string | null;
+  tags: string[];
+}
+
+interface CveCatalogue {
+  configured: boolean;
+  sources: string[];
+  last_synced_at: string | null;
+  total_records: number;
+  entries: CatalogueEntry[];
+  message: string;
+}
+
 interface ThreatIntel {
   global_risk_level: string;
-  active_campaigns: number;
-  zero_days_tracked: number;
+  observed_events: number;
   latest_advisories: ThreatEvent[];
-  global_cves?: ThreatEvent[];
+  passive_monitor: PassiveMonitor;
+  cve_catalogue: CveCatalogue;
 }
 
 export default function ThreatIntelligencePage() {
@@ -33,6 +60,8 @@ export default function ThreatIntelligencePage() {
     queryFn: () => api.get<ThreatIntel>("/threat-intel"),
     refetchInterval: 3000,
   });
+
+  const monitorRunning = data?.passive_monitor?.running ?? false;
 
   const filteredAdvisories = data?.latest_advisories.filter((a) =>
     a.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -62,7 +91,7 @@ export default function ThreatIntelligencePage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-ink neon-text">Global Threat Intelligence</h1>
-            <p className="text-muted mt-1">Live heuristic monitoring and external CVE advisories.</p>
+            <p className="text-muted mt-1">Events observed on this network, plus the external vulnerability catalogue.</p>
           </div>
         </div>
         <div className="relative">
@@ -106,8 +135,9 @@ export default function ThreatIntelligencePage() {
                   <ShieldAlert className="h-7 w-7 animate-pulse-glow" />
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1">Active Campaigns</p>
-                  <h2 className="text-3xl font-bold tracking-tight font-mono text-orange-500 neon-text">{data?.active_campaigns || 0}</h2>
+                  <p className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1">Observed Events</p>
+                  <h2 className="text-3xl font-bold tracking-tight font-mono text-orange-500 neon-text">{data?.observed_events ?? 0}</h2>
+                  <p className="text-[10px] text-muted mt-1">In the current capture window</p>
                 </div>
               </div>
             </motion.div>
@@ -118,8 +148,13 @@ export default function ThreatIntelligencePage() {
                   <Satellite className="h-7 w-7 animate-spin-slow" />
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1">Zero-Days Tracked</p>
-                  <h2 className="text-3xl font-bold tracking-tight font-mono text-purple-500 neon-text">{data?.zero_days_tracked || 0}</h2>
+                  <p className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1">Passive Monitor</p>
+                  <h2 className={cn("text-3xl font-bold tracking-tight font-mono neon-text", monitorRunning ? "text-purple-500" : "text-muted")}>
+                    {monitorRunning ? "ACTIVE" : "OFFLINE"}
+                  </h2>
+                  <p className="text-[10px] text-muted mt-1">
+                    {monitorRunning ? "Observing traffic on this segment" : "Not observing traffic — no events will appear"}
+                  </p>
                 </div>
               </div>
             </motion.div>
@@ -137,8 +172,14 @@ export default function ThreatIntelligencePage() {
               <div className="border-b border-primary/40 bg-surface/80 backdrop-blur-md p-5 relative z-30">
                 <div className="flex items-center gap-3">
                   <h2 className="text-lg font-bold text-ink neon-text tracking-wide">Live Intercept Feed</h2>
-                  <div className="flex items-center gap-2 text-[10px] text-primary animate-pulse border border-primary shadow-neon bg-primary/10 px-2 py-1 rounded-full uppercase tracking-widest font-bold">
-                    <span className="h-2 w-2 rounded-full bg-primary shadow-neon" /> LINK ACTIVE
+                  <div className={cn(
+                    "flex items-center gap-2 text-[10px] px-2 py-1 rounded-full uppercase tracking-widest font-bold border",
+                    monitorRunning
+                      ? "text-primary animate-pulse border-primary shadow-neon bg-primary/10"
+                      : "text-muted border-border bg-surface"
+                  )}>
+                    <span className={cn("h-2 w-2 rounded-full", monitorRunning ? "bg-primary shadow-neon" : "bg-muted")} />
+                    {monitorRunning ? "LINK ACTIVE" : "MONITOR OFFLINE"}
                   </div>
                 </div>
               </div>
@@ -203,49 +244,95 @@ export default function ThreatIntelligencePage() {
                 {filteredAdvisories?.length === 0 && (
                   <div className="p-12 text-center flex flex-col items-center justify-center opacity-50">
                     <Shield className="h-12 w-12 text-primary mb-4" />
-                    <p className="text-primary font-mono text-sm">Monitoring local network traffic.</p>
-                    <p className="text-muted text-xs mt-1">No anomalous signatures detected in current packet stream.</p>
+                    <p className="text-primary font-mono text-sm">
+                      {monitorRunning ? "Monitoring local network traffic." : "Passive monitor is not running."}
+                    </p>
+                    <p className="text-muted text-xs mt-1">
+                      {monitorRunning
+                        ? "No anomalous patterns observed in the current packet stream."
+                        : "Scapy is unavailable or the process lacks CAP_NET_RAW, so no traffic is being observed."}
+                    </p>
                   </div>
                 )}
               </div>
             </motion.div>
 
-            {/* Global CVEs */}
-            {data?.global_cves && (
-              <motion.div variants={item} className="rounded-2xl glass-panel overflow-hidden h-[600px] flex flex-col border-purple-500/30">
-                <div className="border-b border-border/50 bg-surface/50 p-5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-lg font-bold text-ink flex items-center gap-2"><Satellite size={18} className="text-purple-500 animate-pulse" /> Global Vulnerability Database</h2>
-                      <p className="text-xs text-muted mt-1 tracking-wide">Latest critical CVEs tracked by Omni Intel Division.</p>
-                    </div>
+            {/* External vulnerability catalogue */}
+            <motion.div variants={item} className="rounded-2xl glass-panel overflow-hidden h-[600px] flex flex-col border-purple-500/30">
+              <div className="border-b border-border/50 bg-surface/50 p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-lg font-bold text-ink flex items-center gap-2">
+                      <Satellite size={18} className="text-purple-500" /> Vulnerability Catalogue
+                    </h2>
+                    <p className="text-xs text-muted mt-1 tracking-wide">
+                      {data?.cve_catalogue?.configured
+                        ? `${(data.cve_catalogue.total_records ?? 0).toLocaleString()} records from ${data.cve_catalogue.sources.join(", ")}`
+                        : `Sourced from ${data?.cve_catalogue?.sources?.join(", ") || "external feeds"}`}
+                    </p>
                   </div>
+                  <span className={cn(
+                    "shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider",
+                    data?.cve_catalogue?.configured
+                      ? "border-purple-500/40 bg-purple-500/10 text-purple-400"
+                      : "border-border bg-surface text-muted"
+                  )}>
+                    {data?.cve_catalogue?.configured ? "Synced" : "Not configured"}
+                  </span>
                 </div>
-                
-                <div className="flex-1 overflow-y-auto p-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
-                  {data.global_cves.map((cve, i) => (
-                    <motion.div 
-                      key={cve.id} 
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+                {!data?.cve_catalogue?.configured || (data?.cve_catalogue?.entries?.length ?? 0) === 0 ? (
+                  <div className="flex h-full flex-col items-center justify-center gap-3 p-12 text-center">
+                    <DatabaseZap className="h-12 w-12 text-muted/50" />
+                    <p className="font-mono text-sm text-ink/80">Awaiting first synchronisation</p>
+                    <p className="max-w-sm text-xs leading-relaxed text-muted">
+                      {data?.cve_catalogue?.message ||
+                        "No vulnerability intelligence feed is configured."}
+                    </p>
+                    <p className="max-w-sm text-[11px] leading-relaxed text-muted/70">
+                      Open CVE Intelligence to run the first synchronisation.
+                    </p>
+                  </div>
+                ) : (
+                  data.cve_catalogue.entries.map((cve, i) => (
+                    <motion.div
+                      key={cve.id}
                       initial={{ opacity: 0, x: 20 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.1 }}
-                      className="p-5 flex gap-4 hover:bg-surface-hover/50 transition-colors border-b border-border/30 last:border-0 group cursor-pointer"
+                      transition={{ delay: i * 0.05 }}
+                      className="p-5 flex gap-4 hover:bg-surface-hover/50 transition-colors border-b border-border/30 last:border-0 group"
                     >
                       <div className="mt-1 flex-shrink-0">
                         <ShieldAlert size={20} className={cn(
                           "transition-transform group-hover:scale-110",
-                          cve.severity === "CRITICAL" ? "text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]" : 
+                          cve.severity === "CRITICAL" ? "text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]" :
                           cve.severity === "HIGH" ? "text-orange-500" : "text-yellow-500"
                         )} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-4 mb-1">
                           <h3 className="font-semibold text-ink text-sm truncate">{cve.title}</h3>
-                          <span className={cn(
-                            "inline-flex shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider",
-                            cve.severity === "CRITICAL" ? "bg-red-500/10 text-red-500" :
-                            cve.severity === "HIGH" ? "bg-orange-500/10 text-orange-500" : "bg-yellow-500/10 text-yellow-500"
-                          )}>{cve.severity}</span>
+                          <div className="flex shrink-0 items-center gap-1">
+                            {cve.known_exploited && (
+                              <span
+                                title="Listed by CISA as exploited in the wild"
+                                className="inline-flex rounded bg-red-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-500"
+                              >
+                                exploited
+                              </span>
+                            )}
+                            <span className={cn(
+                              "inline-flex rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider",
+                              cve.severity === "CRITICAL" ? "bg-red-500/10 text-red-500" :
+                              cve.severity === "HIGH" ? "bg-orange-500/10 text-orange-500" :
+                              cve.severity === "MEDIUM" ? "bg-yellow-500/10 text-yellow-500" :
+                              "bg-surface-hover text-muted"
+                            )}>
+                              {cve.severity}{cve.cvss != null ? ` ${cve.cvss}` : ""}
+                            </span>
+                          </div>
                         </div>
                         <p className="text-xs text-muted leading-relaxed line-clamp-2 mb-2">{cve.description}</p>
                         <div className="flex items-center justify-between">
@@ -253,15 +340,17 @@ export default function ThreatIntelligencePage() {
                             {cve.id}
                           </p>
                           <span className="text-[10px] text-muted">
-                            {formatDistanceToNow(new Date((cve as any).published_at || cve.timestamp), { addSuffix: true })}
+                            {cve.timestamp
+                              ? formatDistanceToNow(new Date(cve.timestamp), { addSuffix: true })
+                              : "date unknown"}
                           </span>
                         </div>
                       </div>
                     </motion.div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
+                  ))
+                )}
+              </div>
+            </motion.div>
           </div>
         </motion.div>
       )}

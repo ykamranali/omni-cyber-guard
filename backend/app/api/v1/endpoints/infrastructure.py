@@ -1,60 +1,182 @@
-from typing import List, Dict
+"""
+Infrastructure protection.
+
+Records IP addresses an operator has decided to block, together with the
+justification and who made the call. These records are *recommendations with
+an audit trail* — Omni Cyber Guard does not interrupt network traffic itself.
+
+The previous implementation kept the blocklist in a module-level Python set
+and forged spoofed TCP RST packets to tear down connections. That approach
+had three problems: the list was lost on every restart, it was invisible to
+the worker process that actually inspected traffic (so in a Docker deployment
+it did nothing at all), and packet forging is an active-disruption technique
+that this platform does not perform.
+"""
+import ipaddress
+import uuid
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone
 
 from app.core.deps import get_db, require_permission
 from app.core.rbac import Permission
+from app.models.blocked_ip import BlockedIp
 from app.models.user import User
-from app.services.threat_monitor import add_blocked_ip, remove_blocked_ip, blocked_ips
+from app.services.audit import log_action
+from app.services.threat_monitor import monitor_status
 
 router = APIRouter(prefix="/infrastructure", tags=["Infrastructure"])
 
-# In-memory store for metadata about blocked IPs (in a real app, this would be a DB table)
-blocked_ip_metadata: Dict[str, dict] = {}
+ALLOWED_STATUSES = ("recommended", "enforced", "expired")
+
 
 class BlockIPRequest(BaseModel):
     ip: str
-    reason: str = "Manual Block"
+    reason: str = "Manual block"
+
+    @field_validator("ip")
+    @classmethod
+    def valid_ip(cls, v: str) -> str:
+        try:
+            return str(ipaddress.ip_address(v.strip()))
+        except ValueError as exc:
+            raise ValueError(f"'{v}' is not a valid IP address.") from exc
+
+
+class BlockedIPStatusUpdate(BaseModel):
+    status: str
+
+    @field_validator("status")
+    @classmethod
+    def valid_status(cls, v: str) -> str:
+        v = (v or "").strip().lower()
+        if v not in ALLOWED_STATUSES:
+            raise ValueError(f"status must be one of: {', '.join(ALLOWED_STATUSES)}")
+        return v
+
 
 class BlockedIPResponse(BaseModel):
-    ip: str
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    ip_address: str
     reason: str
-    blocked_at: datetime
+    status: str
+    created_at: datetime
 
-@router.get("/blocked-ips", response_model=List[BlockedIPResponse])
-def get_blocked_ips(
-    current_user: User = Depends(require_permission(Permission.VIEW_FINDINGS))
+
+class EnforcementInfo(BaseModel):
+    """Tells the UI, unambiguously, what the platform does and does not do."""
+    platform_enforces_blocks: bool = False
+    explanation: str = (
+        "Omni Cyber Guard records block decisions and their justification. It does "
+        "not drop or reset traffic itself. Apply the rule at your firewall, edge "
+        "ACL or host firewall, then mark the entry as enforced."
+    )
+    passive_monitor: dict
+
+
+@router.get("/enforcement", response_model=EnforcementInfo)
+def enforcement_info(
+    current_user: User = Depends(require_permission(Permission.VIEW_FINDINGS)),
 ):
-    result = []
-    for ip in blocked_ips:
-        meta = blocked_ip_metadata.get(ip, {"reason": "Unknown", "blocked_at": datetime.now(timezone.utc)})
-        result.append({
-            "ip": ip,
-            "reason": meta.get("reason"),
-            "blocked_at": meta.get("blocked_at")
-        })
-    return sorted(result, key=lambda x: x["blocked_at"], reverse=True)
+    return EnforcementInfo(passive_monitor=monitor_status())
 
-@router.post("/blocked-ips", status_code=201)
+
+@router.get("/blocked-ips", response_model=list[BlockedIPResponse])
+def list_blocked_ips(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(Permission.VIEW_FINDINGS)),
+):
+    return (
+        db.query(BlockedIp)
+        .filter(BlockedIp.organization_id == current_user.organization_id)
+        .order_by(BlockedIp.created_at.desc())
+        .all()
+    )
+
+
+@router.post("/blocked-ips", response_model=BlockedIPResponse, status_code=201)
 def block_ip(
     payload: BlockIPRequest,
-    current_user: User = Depends(require_permission(Permission.MANAGE_USERS))
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(Permission.MANAGE_FINDINGS)),
 ):
-    add_blocked_ip(payload.ip)
-    blocked_ip_metadata[payload.ip] = {
-        "reason": payload.reason,
-        "blocked_at": datetime.now(timezone.utc)
-    }
-    return {"status": "success", "message": f"IP {payload.ip} is now actively blocked via TCP RST injection."}
+    existing = (
+        db.query(BlockedIp)
+        .filter(
+            BlockedIp.organization_id == current_user.organization_id,
+            BlockedIp.ip_address == payload.ip,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail=f"{payload.ip} is already on the blocklist.")
 
-@router.delete("/blocked-ips/{ip}")
-def unblock_ip(
-    ip: str,
-    current_user: User = Depends(require_permission(Permission.MANAGE_USERS))
+    entry = BlockedIp(
+        organization_id=current_user.organization_id,
+        created_by_user_id=current_user.id,
+        ip_address=payload.ip,
+        reason=payload.reason,
+        status="recommended",
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+
+    log_action(
+        db, "block_ip", "blocked_ip", current_user.organization_id, current_user.id,
+        str(entry.id), metadata={"ip": entry.ip_address, "reason": entry.reason},
+    )
+    return entry
+
+
+@router.patch("/blocked-ips/{entry_id}", response_model=BlockedIPResponse)
+def update_blocked_ip_status(
+    entry_id: uuid.UUID,
+    payload: BlockedIPStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(Permission.MANAGE_FINDINGS)),
 ):
-    remove_blocked_ip(ip)
-    if ip in blocked_ip_metadata:
-        del blocked_ip_metadata[ip]
-    return {"status": "success"}
+    entry = (
+        db.query(BlockedIp)
+        .filter(BlockedIp.id == entry_id, BlockedIp.organization_id == current_user.organization_id)
+        .first()
+    )
+    if not entry:
+        raise HTTPException(status_code=404, detail="Blocklist entry not found")
+
+    entry.status = payload.status
+    db.commit()
+    db.refresh(entry)
+
+    log_action(
+        db, "update_blocked_ip", "blocked_ip", current_user.organization_id,
+        current_user.id, str(entry.id), metadata={"status": entry.status},
+    )
+    return entry
+
+
+@router.delete("/blocked-ips/{entry_id}", status_code=204)
+def unblock_ip(
+    entry_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(Permission.MANAGE_FINDINGS)),
+):
+    entry = (
+        db.query(BlockedIp)
+        .filter(BlockedIp.id == entry_id, BlockedIp.organization_id == current_user.organization_id)
+        .first()
+    )
+    if not entry:
+        raise HTTPException(status_code=404, detail="Blocklist entry not found")
+
+    ip = entry.ip_address
+    db.delete(entry)
+    db.commit()
+    log_action(
+        db, "unblock_ip", "blocked_ip", current_user.organization_id,
+        current_user.id, str(entry_id), metadata={"ip": ip},
+    )

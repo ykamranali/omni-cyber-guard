@@ -7,11 +7,20 @@ never a fabricated starting number) for a brand-new organization.
 from sqlalchemy.orm import Session
 
 from app.core.rbac import DEFAULT_ROLE_PERMISSIONS
-from app.models.compliance import ComplianceFramework
+from app.models.compliance import ComplianceFramework  # noqa: F401  (kept for callers)
 from app.models.organization import Organization
 from app.models.role import Role, Permission as PermissionModel
 
-STANDARD_FRAMEWORKS = ["ISO 27001", "NIST CSF", "CIS Benchmarks", "PCI DSS", "HIPAA", "GDPR", "SOC 2"]
+# Content packs installed for a new organization.
+#
+# These are original control sets mapped to signals this platform can actually
+# evaluate. The previous behaviour created empty frameworks named "ISO 27001",
+# "PCI DSS" and so on — which implied the platform assesses those standards
+# while holding no control content for any of them, and would have shown an
+# organization a compliance figure against a framework nothing had been written
+# for. Named standards belong here only when the control content behind them
+# exists.
+DEFAULT_CONTENT_PACKS = ["network-hygiene", "host-hardening", "governance-baseline"]
 
 
 def ensure_permission_catalog(db: Session) -> dict[str, PermissionModel]:
@@ -40,8 +49,13 @@ def provision_new_organization(db: Session, org: Organization) -> dict[str, Role
         role_objs[role_name.value] = role
     db.flush()
 
-    for name in STANDARD_FRAMEWORKS:
-        db.add(ComplianceFramework(organization_id=org.id, name=name, coverage_percent=0.0))
-
     db.commit()
+
+    # Install the compliance content packs. Imported here rather than at module
+    # scope to avoid a circular import through the compliance engine.
+    from app.services.compliance.packs import install_pack
+
+    for slug in DEFAULT_CONTENT_PACKS:
+        install_pack(db, org.id, slug)
+
     return role_objs

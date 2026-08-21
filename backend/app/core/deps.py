@@ -10,9 +10,11 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.rbac import Permission
 from app.core.security import decode_token
 from app.db.session import get_db
+from app.db.tenancy import bypass_tenant, set_tenant
 from app.models.user import User
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -37,9 +39,27 @@ def get_current_user(
     except JWTError:
         raise credentials_exception
 
-    user = db.query(User).filter(User.id == uuid.UUID(user_id)).first()
+    try:
+        user = db.query(User).filter(User.id == uuid.UUID(user_id)).first()
+    except ValueError:
+        raise credentials_exception
+
     if user is None or not user.is_active:
         raise credentials_exception
+
+    # Narrow the database session to this user's tenant for the rest of the
+    # request. Row-level security then enforces isolation independently of
+    # whether an individual query remembered to filter on organization_id.
+    #
+    # Super administrators legitimately operate across organizations, so their
+    # sessions stay in bypass — their access is constrained by RBAC and
+    # recorded in the audit log instead.
+    if settings.ENABLE_ROW_LEVEL_SECURITY:
+        if user.is_super_admin:
+            bypass_tenant(db)
+        else:
+            set_tenant(db, user.organization_id)
+
     return user
 
 

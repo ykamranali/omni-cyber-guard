@@ -22,24 +22,14 @@ export default function ReportsPage() {
   const downloadReport = async (url: string, filename: string, setGenerating: (v: boolean) => void) => {
     setGenerating(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/v1${url}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!res.ok) throw new Error("Failed to generate report");
-      
-      const blob = await res.blob();
-      const objectUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = objectUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(objectUrl);
+      await api.download(url, filename);
     } catch (error) {
       console.error("Download failed", error);
-      alert("Failed to download the report. Please ensure the backend is running and you have sufficient permissions.");
+      alert(
+        error instanceof Error
+          ? `Report download failed: ${error.message}`
+          : "Report download failed."
+      );
     } finally {
       setGenerating(false);
     }
@@ -186,8 +176,12 @@ export default function ReportsPage() {
             </select>
             <button 
               onClick={() => {
+                // Previously a raw window.location navigation, which sends no
+                // Authorization header — the export always failed with 401.
                 const url = scanIdAsset !== "all" ? `/assets/export/csv?scan_id=${scanIdAsset}` : "/assets/export/csv";
-                window.location.href = `http://localhost:8000/api/v1${url}`;
+                api
+                  .download(url, "omni-assets.csv")
+                  .catch((error) => alert(`Asset export failed: ${error.message}`));
               }}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-surface-hover border border-border/50 px-4 py-3 text-sm font-semibold text-ink transition-all hover:bg-green-500 hover:text-white hover:border-green-500 hover:shadow-[0_0_15px_rgba(34,197,94,0.5)] mt-1"
             >
