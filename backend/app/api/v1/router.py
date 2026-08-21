@@ -24,6 +24,8 @@ from app.api.v1.endpoints import (
     exposure,
     remediation,
     ws,
+    graph,
+    attack_paths,
 )
 
 api_router = APIRouter()
@@ -50,3 +52,5 @@ api_router.include_router(infrastructure.router)
 api_router.include_router(intelligence.router)
 api_router.include_router(vulnerability_intel.router)
 api_router.include_router(schedules.router, prefix="/schedules", tags=["schedules"])
+api_router.include_router(graph.router, prefix="/graph", tags=["graph"])
+api_router.include_router(attack_paths.router, prefix="/attack-paths", tags=["attack-paths"])

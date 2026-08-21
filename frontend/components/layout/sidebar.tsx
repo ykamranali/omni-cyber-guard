@@ -59,8 +59,8 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: "Exposure",
     items: [
-      { href: "/exposure-graph", label: "Exposure Graph", icon: Share2, built: false },
-      { href: "/attack-paths", label: "Attack Paths", icon: Share2, built: false },
+      { href: "/exposure-graph", label: "Exposure Graph", icon: Share2, built: true },
+      { href: "/attack-paths", label: "Attack Paths", icon: Share2, built: true },
     ],
   },
   {

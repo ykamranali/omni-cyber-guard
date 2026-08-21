@@ -24,6 +24,7 @@ from app.models.remediation import RemediationTask, RiskAcceptance
 from app.models.vulnerability_intel import (
     Cve, CpeMatch, EpssScore, IntelSyncState, KevEntry,
 )
+from app.models.graph import AttackPath, GraphEdge
 
 __all__ = [
     "Organization", "User", "Role", "Permission", "role_permissions", "user_roles",
@@ -35,4 +36,5 @@ __all__ = [
     "ScanJob", "ScanTarget", "DashboardSnapshot", "ExposureSnapshot", "ScanSchedule", "Incident",
     "BlockedIp", "CredentialProfile", "RemediationTask", "RiskAcceptance",
     "Cve", "CpeMatch", "EpssScore", "KevEntry", "IntelSyncState",
+    "AttackPath", "GraphEdge",
 ]
