@@ -73,8 +73,26 @@ def dashboard_summary(
 
     asset_health = round((active_assets / total_assets * 100) if total_assets else 100.0, 1)
 
-    frameworks = db.query(ComplianceFramework).filter(ComplianceFramework.organization_id == org_id).all()
-    compliance_status = {f.name: round(f.coverage_percent, 1) for f in frameworks}
+    # Compliance figures come from the most recent assessment of each framework.
+    # A framework that has never been assessed is omitted rather than shown at
+    # zero — "not assessed" and "zero percent compliant" are different claims,
+    # and the dashboard must not turn the first into the second.
+    from app.models.compliance import ComplianceAssessment
+
+    compliance_status: dict[str, float] = {}
+    frameworks = db.query(ComplianceFramework).filter(
+        ComplianceFramework.organization_id == org_id
+    ).all()
+
+    for framework in frameworks:
+        latest = (
+            db.query(ComplianceAssessment)
+            .filter(ComplianceAssessment.framework_id == framework.id)
+            .order_by(ComplianceAssessment.started_at.desc())
+            .first()
+        )
+        if latest is not None and latest.compliance_percent is not None:
+            compliance_status[framework.name] = latest.compliance_percent
 
     record_snapshot_if_needed(db, org_id, security_score, round(risk_score, 1), open_findings)
 

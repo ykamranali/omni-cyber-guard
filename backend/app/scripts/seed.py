@@ -38,6 +38,8 @@ DEV_USERS = [
 def run() -> None:
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
+    from app.db.tenancy import bypass_tenant
+    bypass_tenant(db)
     try:
         if db.query(Organization).count() > 0:
             print("Database already contains an organization. Skipping seed.")

@@ -82,12 +82,15 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
         if locked:
             user.locked_until = now + timedelta(minutes=LOCKOUT_MINUTES)
             user.failed_login_attempts = 0
+            
+        user_id = str(user.id)
+        org_id = str(user.organization_id)
         db.commit()
 
         log_action(
             db, action="login_failed", resource_type="user",
-            organization_id=user.organization_id, actor_user_id=user.id,
-            resource_id=str(user.id), ip_address=ip_address,
+            organization_id=org_id, actor_user_id=user_id,
+            resource_id=user_id, ip_address=ip_address,
             metadata={"locked": locked},
         )
         raise _INVALID_CREDENTIALS
@@ -98,17 +101,21 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
     user.failed_login_attempts = 0
     user.locked_until = None
     user.last_login_at = now
+    
+    user_id = str(user.id)
+    org_id = str(user.organization_id)
+    
     db.commit()
 
     log_action(
         db, action="login", resource_type="user",
-        organization_id=user.organization_id, actor_user_id=user.id,
-        resource_id=str(user.id), ip_address=ip_address,
+        organization_id=org_id, actor_user_id=user_id,
+        resource_id=user_id, ip_address=ip_address,
     )
 
     return TokenResponse(
-        access_token=create_access_token(str(user.id), {"org_id": str(user.organization_id)}),
-        refresh_token=create_refresh_token(str(user.id)),
+        access_token=create_access_token(user_id, {"org_id": org_id}),
+        refresh_token=create_refresh_token(user_id),
     )
 
 
