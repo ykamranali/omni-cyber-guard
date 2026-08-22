@@ -10,24 +10,31 @@ export interface RoleOut { id: string; name: string; is_system_role: boolean }
 export interface UserFormValues {
   email: string;
   full_name: string;
-  password: string;
+  password?: string;
   role_names: string[];
 }
 
 export function UserFormModal({
-  open, onClose, onSubmit, submitting, roles,
+  open, onClose, onSubmit, submitting, roles, initialData,
 }: {
   open: boolean;
   onClose: () => void;
   onSubmit: (values: UserFormValues) => void;
   submitting: boolean;
   roles: RoleOut[];
+  initialData?: UserFormValues | null;
 }) {
   const [values, setValues] = useState<UserFormValues>({ email: "", full_name: "", password: "", role_names: [] });
 
   useEffect(() => {
-    if (!open) setValues({ email: "", full_name: "", password: "", role_names: [] });
-  }, [open]);
+    if (open) {
+      if (initialData) {
+        setValues({ ...initialData, password: "" });
+      } else {
+        setValues({ email: "", full_name: "", password: "", role_names: [] });
+      }
+    }
+  }, [open, initialData]);
 
   function toggleRole(name: string) {
     setValues((v) => ({
@@ -42,7 +49,7 @@ export function UserFormModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Add User">
+        <Modal open={open} onClose={onClose} title={initialData ? "Edit User" : "Add User"}>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
           <label className="mb-1 block text-xs text-muted">Full name *</label>
@@ -53,8 +60,10 @@ export function UserFormModal({
           <Input required type="email" value={values.email} onChange={(e) => setValues((v) => ({ ...v, email: e.target.value }))} />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-muted">Temporary password *</label>
-          <Input required type="password" minLength={8} value={values.password} onChange={(e) => setValues((v) => ({ ...v, password: e.target.value }))} />
+          <label className="mb-1 block text-xs text-muted">
+            {initialData ? "New password (leave blank to keep current)" : "Temporary password *"}
+          </label>
+          <Input required={!initialData} type="password" minLength={8} value={values.password || ""} onChange={(e) => setValues((v) => ({ ...v, password: e.target.value }))} />
         </div>
         <div>
           <label className="mb-1.5 block text-xs text-muted">Roles</label>
@@ -78,7 +87,7 @@ export function UserFormModal({
 
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={submitting}>{submitting ? "Saving…" : "Create User"}</Button>
+          <Button type="submit" disabled={submitting}>{submitting ? "Saving…" : initialData ? "Update User" : "Create User"}</Button>
         </div>
       </form>
     </Modal>

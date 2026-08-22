@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, UserX, CheckCircle2 } from "lucide-react";
+import { Plus, UserX, CheckCircle2, Edit2 } from "lucide-react";
 
 import { Topbar } from "@/components/layout/topbar";
 import { Card } from "@/components/ui/card";
@@ -25,6 +25,7 @@ export default function UsersPage() {
   const queryClient = useQueryClient();
   const currentUser = useAuthStore((s) => s.user);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserOut | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const { data: users, isLoading, isError } = useQuery({
@@ -44,6 +45,17 @@ export default function UsersPage() {
       setError(null);
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : "Failed to create user"),
+  });
+
+  const updateUser = useMutation({
+    mutationFn: ({ id, values }: { id: string, values: Partial<UserFormValues> }) => api.patch<UserOut>(`/users/${id}`, values),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      setModalOpen(false);
+      setEditingUser(null);
+      setError(null);
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : "Failed to update user"),
   });
 
   const deactivateUser = useMutation({
@@ -101,15 +113,28 @@ export default function UsersPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {u.is_active && u.id !== currentUser?.id && (
+                        <div className="flex justify-end gap-3">
                           <button
-                            onClick={() => deactivateUser.mutate(u.id)}
-                            className="rounded-md p-1.5 text-muted hover:bg-critical/10 hover:text-critical"
-                            title="Deactivate user"
+                            onClick={() => {
+                              setError(null);
+                              setEditingUser(u);
+                              setModalOpen(true);
+                            }}
+                            className="rounded-md p-1.5 text-muted hover:bg-primary/10 hover:text-primary transition-colors"
+                            title="Edit user"
                           >
-                            <UserX size={15} />
+                            <Edit2 size={15} />
                           </button>
-                        )}
+                          {u.is_active && u.id !== currentUser?.id && (
+                            <button
+                              onClick={() => deactivateUser.mutate(u.id)}
+                              className="rounded-md p-1.5 text-muted hover:bg-critical/10 hover:text-critical"
+                              title="Deactivate user"
+                            >
+                              <UserX size={15} />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -122,10 +147,25 @@ export default function UsersPage() {
 
       <UserFormModal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        submitting={createUser.isPending}
+        onClose={() => { setModalOpen(false); setEditingUser(null); }}
+        submitting={createUser.isPending || updateUser.isPending}
         roles={roles || []}
-        onSubmit={(values) => createUser.mutate(values)}
+        initialData={editingUser ? {
+          email: editingUser.email,
+          full_name: editingUser.full_name,
+          role_names: editingUser.roles,
+        } : undefined}
+        onSubmit={(values) => {
+          if (editingUser) {
+            const updatePayload: Partial<UserFormValues> = { ...values };
+            if (!updatePayload.password) {
+              delete updatePayload.password;
+            }
+            updateUser.mutate({ id: editingUser.id, values: updatePayload });
+          } else {
+            createUser.mutate(values);
+          }
+        }}
       />
     </>
   );

@@ -7,6 +7,7 @@ from app.db.session import get_db
 from app.core.deps import get_current_user, require_permission
 from app.core.rbac import Permission
 from app.models.scan_schedule import ScanSchedule
+from app.models.user import User
 from app.schemas.scan_schedule import ScanScheduleCreate, ScanScheduleUpdate, ScanScheduleResponse
 
 router = APIRouter()

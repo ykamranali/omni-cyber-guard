@@ -334,8 +334,14 @@ export default function AssetsPage() {
                                 </td>
                                 <td className="px-4 py-3 text-right">
                                   <button
-                                    onClick={() => deleteAsset.mutate(asset.id)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (confirm(`Are you sure you want to delete ${asset.hostname}?`)) {
+                                        deleteAsset.mutate(asset.id);
+                                      }
+                                    }}
                                     className="rounded-md p-1.5 text-muted hover:bg-critical/10 hover:text-critical"
+                                    title="Delete Asset"
                                   >
                                     <Trash2 size={15} />
                                   </button>

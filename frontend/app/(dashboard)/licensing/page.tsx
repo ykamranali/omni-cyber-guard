@@ -110,9 +110,23 @@ export default function LicensingPage() {
             <BadgeDollarSign className="mx-auto h-8 w-8 text-muted/50 mb-3" />
             <h3 className="font-semibold text-ink">Need more capacity?</h3>
             <p className="text-sm text-muted mt-2 mb-4">Contact your technical account manager to increase your asset limit.</p>
-            <button className="w-full rounded-lg bg-primary/10 border border-primary/20 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/20">
-              Contact Sales
-            </button>
+            <div className="flex flex-col gap-2">
+              <a href="mailto:ykamranali7777@gmail.com" className="w-full rounded-lg bg-primary/10 border border-primary/20 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/20 text-center flex items-center justify-center">
+                Email Sales
+              </a>
+              <a href="https://wa.me/971508169288" target="_blank" rel="noopener noreferrer" className="w-full rounded-lg bg-[#25D366]/10 border border-[#25D366]/20 px-4 py-2 text-sm font-semibold text-[#25D366] transition-colors hover:bg-[#25D366]/20 text-center flex items-center justify-center">
+                WhatsApp Sales
+              </a>
+            </div>
+            
+            <div className="mt-6 pt-4 border-t border-border/50 flex justify-center gap-4">
+              <button className="text-xs text-muted hover:text-primary transition-colors flex items-center gap-1" onClick={() => alert('License edit not implemented')}>
+                Edit License
+              </button>
+              <button className="text-xs text-muted hover:text-critical transition-colors flex items-center gap-1" onClick={() => alert('License delete not implemented')}>
+                Delete License
+              </button>
+            </div>
           </div>
         </div>
       </div>

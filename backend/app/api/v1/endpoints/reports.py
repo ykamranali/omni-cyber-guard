@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 from app.core.deps import get_db, get_current_user, require_permission
 from app.core.rbac import Permission
+from app.models.user import User
 from app.reports.pdf_generator import PDFReportGenerator
 
 router = APIRouter(prefix="/reports", tags=["reports"])

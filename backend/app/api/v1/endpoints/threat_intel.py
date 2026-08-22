@@ -27,6 +27,7 @@ router = APIRouter(prefix="/threat-intel", tags=["Threat Intelligence"])
 
 @router.get("")
 def get_threat_intelligence(
+    db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(Permission.VIEW_FINDINGS)),
 ):
     observed = get_recent_threats()
