@@ -54,6 +54,8 @@ export default function CloudAssetsPage() {
 
   useEffect(() => {
     fetchResources();
+    const interval = setInterval(fetchResources, 5000);
+    return () => clearInterval(interval);
   }, [fetchResources]);
 
   if (loading) {

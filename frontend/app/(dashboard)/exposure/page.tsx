@@ -91,16 +91,19 @@ export default function ExposurePage() {
   const { data: overview } = useQuery({
     queryKey: ["exposure-overview"],
     queryFn: () => api.get<Overview>("/exposure/overview"),
+    refetchInterval: 5000,
   });
 
   const { data: topAssets = [] } = useQuery({
     queryKey: ["exposure-top-assets"],
     queryFn: () => api.get<TopAsset[]>("/exposure/top-assets?limit=10"),
+    refetchInterval: 5000,
   });
 
   const { data: trend } = useQuery({
     queryKey: ["exposure-trend"],
     queryFn: () => api.get<{ points: TrendPoint[]; note: string | null }>("/exposure/trend?days=30"),
+    refetchInterval: 5000,
   });
 
   const { data: detail } = useQuery({

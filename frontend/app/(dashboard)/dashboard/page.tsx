@@ -59,32 +59,37 @@ export default function DashboardPage() {
   const { data: summary, isLoading, isError } = useQuery({
     queryKey: ["dashboard-summary"],
     queryFn: () => api.get<DashboardSummary>("/dashboard/summary"),
+    refetchInterval: 5000,
   });
   const { data: trend } = useQuery({
     queryKey: ["dashboard-trend"],
     queryFn: () => api.get<TrendPoint[]>("/dashboard/trend?days=7"),
     enabled: !!summary,
+    refetchInterval: 5000,
   });
   const { data: topRisky } = useQuery({
     queryKey: ["top-risky-assets"],
     queryFn: () => api.get<AssetOut[]>("/dashboard/top-risky-assets?limit=5"),
     enabled: !!summary,
+    refetchInterval: 5000,
   });
   const { data: geoAssets } = useQuery({
     queryKey: ["geo-assets"],
     queryFn: () => api.get<AssetOut[]>("/dashboard/geo-assets"),
     enabled: !!summary,
+    refetchInterval: 5000,
   });
   const { data: scans } = useQuery({
     queryKey: ["scans"],
     queryFn: () => api.get<ScanJobOut[]>("/scans"),
     enabled: !!summary,
+    refetchInterval: 5000,
   });
   const { data: systemStatus } = useQuery({
     queryKey: ["system-status"],
     queryFn: () => api.get<SystemStatusOut>("/system/status"),
     enabled: !!summary,
-    refetchInterval: 30_000,
+    refetchInterval: 5000,
   });
 
   const severityData = summary

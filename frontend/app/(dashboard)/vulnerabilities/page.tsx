@@ -81,11 +81,13 @@ export default function VulnerabilitiesPage() {
   const { data: scans } = useQuery({
     queryKey: ["scans"],
     queryFn: () => api.get<any[]>("/scans"),
+    refetchInterval: 5000,
   });
 
   const { data: summary } = useQuery({
     queryKey: ["findings-summary"],
     queryFn: () => api.get<FindingsSummary>("/findings/summary"),
+    refetchInterval: 5000,
   });
 
   const { data: findings, isLoading, isError } = useQuery({
@@ -96,6 +98,7 @@ export default function VulnerabilitiesPage() {
       const queryStr = params.toString();
       return api.get<FindingOut[]>(`/findings${queryStr ? `?${queryStr}` : ""}`);
     },
+    refetchInterval: 5000,
   });
 
   const updateStatus = useMutation({

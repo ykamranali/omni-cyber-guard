@@ -31,6 +31,7 @@ export default function UsersPage() {
   const { data: users, isLoading, isError } = useQuery({
     queryKey: ["users"],
     queryFn: () => api.get<UserOut[]>("/users"),
+    refetchInterval: 5000,
   });
   const { data: roles } = useQuery({
     queryKey: ["roles"],

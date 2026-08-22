@@ -48,6 +48,7 @@ export default function AssetsPage() {
   const { data: scans } = useQuery({
     queryKey: ["scans"],
     queryFn: () => api.get<any[]>("/scans"),
+    refetchInterval: 5000,
   });
 
   const { data: assets, isLoading, isError } = useQuery({
@@ -59,6 +60,7 @@ export default function AssetsPage() {
       const queryStr = params.toString();
       return api.get<AssetOut[]>(`/assets${queryStr ? `?${queryStr}` : ""}`);
     },
+    refetchInterval: 5000,
   });
 
   // Group assets by scan_job_id

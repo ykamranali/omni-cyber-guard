@@ -3,7 +3,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc libpq-dev curl nmap unzip \
+    gcc libpq-dev curl nmap unzip lynis \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -L https://github.com/projectdiscovery/nuclei/releases/download/v3.2.0/nuclei_3.2.0_linux_amd64.zip -o nuclei.zip \
@@ -14,9 +14,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Create non-root user and switch to it
-RUN groupadd -r ocg_app && useradd -r -g ocg_app ocg_app
+RUN groupadd -r ocg_app && useradd -r -m -g ocg_app ocg_app
 COPY --chown=ocg_app:ocg_app . .
 USER ocg_app
+
+# Download nuclei templates so the engine is fully available
+RUN nuclei -update-templates
 
 EXPOSE 8000
 
