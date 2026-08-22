@@ -11,7 +11,7 @@ celery_app = Celery(
     "omni_cyber_guard",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["app.tasks.scan_tasks", "app.tasks.scheduler_tasks", "app.tasks.intel_tasks"],
+    include=["app.tasks.scan_tasks", "app.tasks.scheduler_tasks", "app.tasks.intel_tasks", "app.tasks.discovery_tasks"],
 )
 
 celery_app.conf.update(

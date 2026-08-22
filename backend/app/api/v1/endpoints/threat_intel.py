@@ -16,7 +16,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_active_user
+from app.core.deps import get_db, require_permission
+from app.core.rbac import Permission
 from app.models.user import User
 from app.models.vulnerability_intel import Cve, EpssScore, IntelSyncState, KevEntry
 from app.services.threat_monitor import get_recent_threats, monitor_status
@@ -26,8 +27,7 @@ router = APIRouter(prefix="/threat-intel", tags=["Threat Intelligence"])
 
 @router.get("")
 def get_threat_intelligence(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_permission(Permission.VIEW_FINDINGS)),
 ):
     observed = get_recent_threats()
     status = monitor_status()

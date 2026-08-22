@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from app.core.deps import get_db, get_current_active_user
+from app.core.deps import get_db, get_current_active_user, require_permission
+from app.core.rbac import Permission
 from app.models.user import User
 from app.models.audit_log import AuditLog
 
@@ -13,7 +14,7 @@ def list_audit_logs(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission(Permission.VIEW_AUDIT_LOGS))
 ):
     query = db.query(AuditLog, User.email).outerjoin(User, AuditLog.actor_user_id == User.id)\
         .filter(AuditLog.organization_id == current_user.organization_id)

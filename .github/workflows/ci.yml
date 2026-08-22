@@ -89,8 +89,15 @@ jobs:
         run: alembic upgrade head
 
       - name: Verify migrations are reversible
+        # The whole chain, not just the newest revision. Two revisions had
+        # downgrades that could not be compiled at all, and several left their
+        # enum types behind, so `downgrade base` failed and nobody noticed
+        # because CI only ever stepped back one. Running it twice also proves
+        # a downgraded database can be brought back up.
         run: |
-          alembic downgrade -1
+          alembic downgrade base
+          alembic upgrade head
+          alembic downgrade base
           alembic upgrade head
 
       - name: Run tests

@@ -2,9 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { Bell, LogOut, ChevronDown, Search, Maximize, Minimize, Sun, Moon } from "lucide-react";
-import { useState, KeyboardEvent } from "react";
+import { useState, KeyboardEvent, useEffect, useRef } from "react";
 import { useAuthStore } from "@/store/auth";
 import { useThemeStore } from "@/store/theme";
+import { api } from "@/lib/api";
+import Link from "next/link";
 
 export function Topbar({ title, criticalCount = 0 }: { title: string; criticalCount?: number }) {
   const router = useRouter();
@@ -16,13 +18,58 @@ export function Topbar({ title, criticalCount = 0 }: { title: string; criticalCo
   const [searchValue, setSearchValue] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  const [searchResults, setSearchResults] = useState<any>(null);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const searchTimeoutRef = useRef<NodeJS.Timeout>();
+
+  useEffect(() => {
+    // Fetch initial notifications
+    if (user) {
+      api.get<any>("/notifications").then((data) => {
+        setNotifications(data.items);
+        setUnreadCount(data.unread_count);
+      }).catch(console.error);
+    }
+  }, [user]);
+
   function handleLogout() {
     logout();
     router.push("/login");
   }
 
+  function handleSearchChange(val: string) {
+    setSearchValue(val);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    
+    if (!val.trim()) {
+      setSearchResults(null);
+      return;
+    }
+    
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const results = await api.get<any>(`/search?q=${encodeURIComponent(val)}`);
+        setSearchResults(results);
+      } catch (err) {
+        console.error("Search failed", err);
+      }
+    }, 300);
+  }
+
+  async function handleMarkRead(id: string) {
+    try {
+      await api.patch(`/notifications/${id}/read`);
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read_at: new Date().toISOString() } : n));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
   function handleSearchKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter" && searchValue.trim()) {
+      setSearchResults(null);
       router.push(`/assets?search=${encodeURIComponent(searchValue.trim())}`);
     }
   }
@@ -45,11 +92,52 @@ export function Topbar({ title, criticalCount = 0 }: { title: string; criticalCo
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
         <input
           value={searchValue}
-          onChange={(e) => setSearchValue(e.target.value)}
+          onChange={(e) => handleSearchChange(e.target.value)}
           onKeyDown={handleSearchKeyDown}
-          placeholder="Search assets… (press Enter)"
+          onBlur={() => setTimeout(() => setSearchResults(null), 200)}
+          placeholder="Global search… (press Enter for assets)"
           className="h-9 w-full rounded-lg border border-border bg-background/60 pl-9 pr-3 text-sm text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
         />
+        {searchResults && (
+          <div className="absolute left-0 top-12 max-h-[70vh] w-[500px] overflow-y-auto rounded-lg border border-border bg-surface p-2 shadow-glass z-50">
+            {searchResults.assets?.length > 0 && (
+              <div className="mb-2">
+                <h3 className="px-2 pb-1 text-xs font-semibold uppercase text-muted">Assets</h3>
+                {searchResults.assets.map((a: any) => (
+                  <Link key={a.id} href={`/assets/${a.id}`} className="block rounded-md px-2 py-1.5 hover:bg-surface-hover">
+                    <p className="text-sm font-medium text-ink">{a.hostname}</p>
+                    <p className="text-xs text-muted">{a.ip_address}</p>
+                  </Link>
+                ))}
+              </div>
+            )}
+            {searchResults.findings?.length > 0 && (
+              <div className="mb-2">
+                <h3 className="px-2 pb-1 text-xs font-semibold uppercase text-muted">Findings</h3>
+                {searchResults.findings.map((f: any) => (
+                  <Link key={f.id} href={`/vulnerabilities`} className="block rounded-md px-2 py-1.5 hover:bg-surface-hover">
+                    <p className="text-sm font-medium text-ink">{f.title}</p>
+                    <p className="text-xs text-muted">{f.severity} • {f.status}</p>
+                  </Link>
+                ))}
+              </div>
+            )}
+            {searchResults.cves?.length > 0 && (
+              <div className="mb-2">
+                <h3 className="px-2 pb-1 text-xs font-semibold uppercase text-muted">CVE Intel</h3>
+                {searchResults.cves.map((c: any) => (
+                  <Link key={c.id} href={`/cve-intelligence/${c.id}`} className="block rounded-md px-2 py-1.5 hover:bg-surface-hover">
+                    <p className="text-sm font-medium text-ink">{c.id}</p>
+                    <p className="text-xs text-muted truncate">{c.description}</p>
+                  </Link>
+                ))}
+              </div>
+            )}
+            {(!searchResults.assets?.length && !searchResults.findings?.length && !searchResults.cves?.length) && (
+              <p className="p-4 text-center text-sm text-muted">No results found.</p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2">
@@ -75,20 +163,42 @@ export function Topbar({ title, criticalCount = 0 }: { title: string; criticalCo
             className="relative rounded-lg p-2 text-ink/75 hover:bg-surface-hover"
           >
             <Bell size={18} />
-            {criticalCount > 0 && (
+            {unreadCount > 0 && (
               <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-critical px-1 text-[10px] font-semibold text-white">
-                {criticalCount > 9 ? "9+" : criticalCount}
+                {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
           </button>
           {notifOpen && (
-            <div className="absolute right-0 top-12 w-64 rounded-lg border border-border bg-surface p-3 shadow-glass">
-              <p className="text-sm text-ink/85">
-                {criticalCount > 0
-                  ? `${criticalCount} critical finding${criticalCount === 1 ? "" : "s"} need attention.`
-                  : "No critical findings right now."}
-              </p>
-              <p className="mt-1 text-xs text-muted">See the Vulnerabilities page for details.</p>
+            <div className="absolute right-0 top-12 w-80 max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-surface shadow-glass z-50">
+              <div className="border-b border-border p-3 sticky top-0 bg-surface/90 backdrop-blur-sm flex justify-between items-center">
+                <h3 className="text-sm font-semibold text-ink">Notifications</h3>
+                {unreadCount > 0 && (
+                  <button onClick={async () => {
+                    await api.post("/notifications/read-all");
+                    setNotifications(prev => prev.map(n => ({ ...n, read_at: new Date().toISOString() })));
+                    setUnreadCount(0);
+                  }} className="text-xs text-primary hover:underline">Mark all read</button>
+                )}
+              </div>
+              <div className="p-2">
+                {notifications.length > 0 ? notifications.map(n => (
+                  <div key={n.id} className={`p-3 text-sm border-b border-border last:border-0 rounded-md ${n.read_at ? 'opacity-60' : 'bg-primary/5'} relative group`}>
+                    <p className="font-medium text-ink">{n.title}</p>
+                    <p className="text-muted text-xs mt-1">{n.message}</p>
+                    {!n.read_at && (
+                      <button 
+                        onClick={() => handleMarkRead(n.id)}
+                        className="absolute right-2 top-2 hidden group-hover:block text-xs text-primary bg-surface rounded px-1.5"
+                      >
+                        Mark read
+                      </button>
+                    )}
+                  </div>
+                )) : (
+                  <p className="p-4 text-center text-sm text-muted">No notifications.</p>
+                )}
+              </div>
             </div>
           )}
         </div>

@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 from croniter import croniter
 
 from app.db.session import get_db
-from app.core.deps import get_current_user
-from app.models.user import User
+from app.core.deps import get_current_user, require_permission
+from app.core.rbac import Permission
 from app.models.scan_schedule import ScanSchedule
 from app.schemas.scan_schedule import ScanScheduleCreate, ScanScheduleUpdate, ScanScheduleResponse
 
@@ -14,7 +14,7 @@ router = APIRouter()
 @router.get("/", response_model=list[ScanScheduleResponse])
 def list_schedules(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(Permission.RUN_SCANS)),
 ):
     """
     List all scan schedules for the current organization.
@@ -28,7 +28,7 @@ def list_schedules(
 def create_schedule(
     schedule_in: ScanScheduleCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(Permission.RUN_SCANS)),
 ):
     """
     Create a new recurring scan schedule.
@@ -50,7 +50,7 @@ def create_schedule(
 def delete_schedule(
     schedule_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(Permission.RUN_SCANS)),
 ):
     schedule = db.query(ScanSchedule).filter(
         ScanSchedule.id == schedule_id,
@@ -69,7 +69,7 @@ def update_schedule(
     schedule_id: uuid.UUID,
     schedule_in: ScanScheduleUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(Permission.RUN_SCANS)),
 ):
     schedule = db.query(ScanSchedule).filter(
         ScanSchedule.id == schedule_id,

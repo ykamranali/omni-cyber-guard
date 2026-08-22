@@ -72,6 +72,32 @@ class Settings(BaseSettings):
     # Automatic daily synchronisation of the KEV, EPSS and NVD feeds.
     ENABLE_INTEL_SYNC: bool = True
 
+    # --- AI security engineer ------------------------------------------
+    # The agent is deliberately unconfigured by default. Its previous form
+    # defaulted to a local Ollama endpoint and, when that endpoint was absent,
+    # returned the connection error to the operator inside the answer field —
+    # indistinguishable in the UI from analysis. An assistant that cannot reach
+    # a model must say so as a status, not as content.
+    #
+    # Supported values: "" (disabled), "openai_compatible", "ollama".
+    AGENT_LLM_PROVIDER: str = ""
+    # openai_compatible: the /v1 root, e.g. https://api.example.com/v1
+    # ollama:            the server root, e.g. http://localhost:11434
+    AGENT_LLM_BASE_URL: str = ""
+    AGENT_LLM_MODEL: str = ""
+    AGENT_LLM_API_KEY: str = ""
+    AGENT_LLM_TIMEOUT_SECONDS: int = 60
+    # How many retrieve-then-reason rounds the agent may take before it must
+    # answer from what it has. Bounded so a model that keeps calling tools
+    # cannot hold a request open indefinitely.
+    AGENT_MAX_TOOL_ITERATIONS: int = 6
+    # Rows any single retrieval tool may return. Keeps the evidence set small
+    # enough to attach to the response in full, which is what makes the
+    # answer checkable.
+    AGENT_MAX_ROWS_PER_TOOL: int = 50
+    # How long an operator has to confirm an action the agent proposed.
+    AGENT_PROPOSAL_TTL_MINUTES: int = 60
+
     OVERRIDE_LOCAL_IP: str | None = None
 
     @property
@@ -104,6 +130,11 @@ class Settings(BaseSettings):
             problems.append(
                 "ENABLE_ROW_LEVEL_SECURITY is off, leaving tenant isolation "
                 "dependent on application query filters alone"
+            )
+
+        if "*" in self.BACKEND_CORS_ORIGINS or any(origin.strip() == "*" for origin in self.BACKEND_CORS_ORIGINS):
+            problems.append(
+                "BACKEND_CORS_ORIGINS contains a wildcard '*', which is not permitted in production"
             )
 
         if problems:

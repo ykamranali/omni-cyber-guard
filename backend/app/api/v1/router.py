@@ -26,6 +26,11 @@ from app.api.v1.endpoints import (
     ws,
     graph,
     attack_paths,
+    attack_surface,
+    cloud,
+    identity,
+    notifications,
+    search,
 )
 
 api_router = APIRouter()
@@ -54,3 +59,8 @@ api_router.include_router(vulnerability_intel.router)
 api_router.include_router(schedules.router, prefix="/schedules", tags=["schedules"])
 api_router.include_router(graph.router, prefix="/graph", tags=["graph"])
 api_router.include_router(attack_paths.router, prefix="/attack-paths", tags=["attack-paths"])
+api_router.include_router(attack_surface.router, prefix="/attack-surface", tags=["attack-surface"])
+api_router.include_router(cloud.router, prefix="/cloud", tags=["cloud"])
+api_router.include_router(identity.router, prefix="/identity", tags=["identity"])
+api_router.include_router(search.router, prefix="/search", tags=["search"])
+api_router.include_router(notifications.router, prefix="/notifications", tags=["notifications"])

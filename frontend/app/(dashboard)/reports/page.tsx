@@ -1,196 +1,117 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { FileBarChart2, Download, FileText, FileSpreadsheet, Loader2, Sparkles } from "lucide-react";
-import { useAuthStore } from "@/store/auth";
-import { api } from "@/lib/api";
-import { motion } from "framer-motion";
+import { 
+  FileBarChart2, Download, FileText, 
+  ShieldCheck, Activity, Calendar
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export default function ReportsPage() {
-  const [isGeneratingExe, setIsGeneratingExe] = useState(false);
-  const [isGeneratingTech, setIsGeneratingTech] = useState(false);
-  const [scanIdTech, setScanIdTech] = useState("all");
-  const [scanIdAsset, setScanIdAsset] = useState("all");
-  const token = useAuthStore((s) => s.accessToken);
+  const [downloading, setDownloading] = useState<string | null>(null);
 
-  const { data: scans } = useQuery({
-    queryKey: ["scans"],
-    queryFn: () => api.get<any[]>("/scans"),
-  });
-
-  const downloadReport = async (url: string, filename: string, setGenerating: (v: boolean) => void) => {
-    setGenerating(true);
+  const downloadReport = async (type: string, url: string) => {
     try {
-      await api.download(url, filename);
+      setDownloading(type);
+      // In a real app we'd fetch with auth headers, but assuming cookie-based or just triggering a download
+      const response = await fetch(`/api/v1/reports/${url}`);
+      
+      if (!response.ok) throw new Error("Download failed");
+      
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = `${type}_Report_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(downloadUrl);
+      document.body.removeChild(a);
     } catch (error) {
-      console.error("Download failed", error);
-      alert(
-        error instanceof Error
-          ? `Report download failed: ${error.message}`
-          : "Report download failed."
-      );
+      console.error("Failed to download report:", error);
     } finally {
-      setGenerating(false);
+      setDownloading(null);
     }
   };
 
-  const container = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: { staggerChildren: 0.1 }
+  const reports = [
+    {
+      id: "executive",
+      title: "Executive Security Summary",
+      description: "High-level overview of organizational risk, compliance posture, and remediation progress designed for C-suite and board members.",
+      icon: ShieldCheck,
+      color: "text-emerald-500",
+      bg: "bg-emerald-500/10 border-emerald-500/30 shadow-emerald-500/10",
+      url: "executive/pdf"
+    },
+    {
+      id: "technical",
+      title: "Technical Vulnerability Report",
+      description: "Detailed breakdown of discovered vulnerabilities, affected assets, CVSS/EPSS scores, and step-by-step remediation guidance for engineers.",
+      icon: Activity,
+      color: "text-blue-500",
+      bg: "bg-blue-500/10 border-blue-500/30 shadow-blue-500/10",
+      url: "technical/pdf"
     }
-  };
-
-  const item = {
-    hidden: { opacity: 0, scale: 0.95, y: 20 },
-    show: { opacity: 1, scale: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
-  };
+  ];
 
   return (
-    <div className="flex flex-col gap-8 p-8 max-w-7xl mx-auto w-full">
-      <motion.div 
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex items-center gap-4 border-b border-border/50 pb-6"
-      >
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 border border-primary/20 shadow-neon">
-          <FileBarChart2 className="h-6 w-6 text-primary" />
-        </div>
+    <div className="space-y-6 p-6">
+      <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink neon-text">Report Generation</h1>
-          <p className="text-muted mt-1">Compile and export professional security reports for executive and technical audiences.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-ink">Reports</h1>
+          <p className="mt-2 text-muted">Generate and download comprehensive security reports</p>
         </div>
-      </motion.div>
+      </div>
 
-      <motion.div 
-        variants={container}
-        initial="hidden"
-        animate="show"
-        className="grid gap-8 md:grid-cols-2 lg:grid-cols-3"
-      >
-        {/* Executive Report */}
-        <motion.div variants={item} className="group flex flex-col gap-6 rounded-2xl glass-panel p-8 transition-all duration-300 hover:shadow-neon hover:border-primary/50 relative overflow-hidden">
-          <div className="absolute -right-20 -top-20 h-40 w-40 rounded-full bg-red-500/5 blur-3xl group-hover:bg-red-500/10 transition-colors" />
-          
-          <div className="flex items-start gap-4 relative z-10">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500 border border-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.2)]">
-              <FileText className="h-6 w-6" />
-            </div>
-            <div>
-              <h3 className="font-bold text-ink text-lg tracking-wide">Executive Summary</h3>
-              <p className="text-xs font-mono tracking-widest text-red-500 uppercase mt-1">PDF Format</p>
-            </div>
-          </div>
-          <p className="text-sm text-muted leading-relaxed flex-1 relative z-10">
-            A high-level overview of your organization&apos;s security posture, including total assets, risk scores, and critical vulnerability summaries suitable for C-suite presentation.
-          </p>
-          <div className="mt-auto relative z-10 pt-4 border-t border-border/50">
-            <button
-              onClick={() => downloadReport("/reports/executive/pdf", "Executive_Security_Report.pdf", setIsGeneratingExe)}
-              disabled={isGeneratingExe}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-surface-hover border border-border/50 px-4 py-3 text-sm font-semibold text-ink transition-all hover:bg-red-500 hover:text-white hover:border-red-500 hover:shadow-[0_0_15px_rgba(239,68,68,0.5)] disabled:opacity-50 group-hover:bg-primary/5"
-            >
-              {isGeneratingExe ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
-              {isGeneratingExe ? "Generating Report..." : "Compile & Download"}
-            </button>
-          </div>
-        </motion.div>
-
-        {/* Technical Report */}
-        <motion.div variants={item} className="group flex flex-col gap-6 rounded-2xl jarvis-panel p-8 transition-all duration-300 hover:shadow-neon hover:border-primary/50 relative overflow-hidden">
-          <div className="absolute -right-20 -top-20 h-40 w-40 rounded-full bg-primary/5 blur-3xl group-hover:bg-primary/10 transition-colors" />
-          
-          <div className="flex items-start gap-4 relative z-10">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20 shadow-[0_0_15px_rgba(14,165,233,0.2)]">
-              <Sparkles className="h-6 w-6" />
-            </div>
-            <div>
-              <h3 className="font-bold text-ink text-lg tracking-wide">Technical Details</h3>
-              <p className="text-xs font-mono tracking-widest text-primary uppercase mt-1">PDF Format</p>
-            </div>
-          </div>
-          <p className="text-sm text-muted leading-relaxed flex-1 relative z-10">
-            Detailed technical breakdown of all open findings, including CVEs, CVSS scores, affected assets, and remediation steps intended for engineering teams.
-          </p>
-          
-          <div className="flex flex-col gap-3 mt-auto relative z-10 pt-4 border-t border-primary/20">
-            <label className="text-xs font-semibold text-muted uppercase tracking-wider">Scope Selection</label>
-            <select
-              value={scanIdTech}
-              onChange={(e) => setScanIdTech(e.target.value)}
-              className="h-10 w-full rounded-xl border border-primary/30 bg-surface-hover/50 px-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all"
-            >
-              <option value="all">Global Workspace (All Scans)</option>
-              {scans?.filter(s => s.status === "completed").map((s) => (
-                <option key={s.id} value={s.id}>
-                  Scan Target: {s.target_cidr}
-                </option>
-              ))}
-            </select>
-            <button 
-              onClick={() => {
-                const url = scanIdTech !== "all" ? `/reports/technical/pdf?scan_id=${scanIdTech}` : "/reports/technical/pdf";
-                downloadReport(url, "Technical_Vulnerability_Report.pdf", setIsGeneratingTech);
-              }}
-              disabled={isGeneratingTech}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-neon disabled:opacity-50 mt-1"
-            >
-              {isGeneratingTech ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
-              {isGeneratingTech ? "Generating Report..." : "Compile & Download"}
-            </button>
-          </div>
-        </motion.div>
-        
-        {/* Asset Export */}
-        <motion.div variants={item} className="group flex flex-col gap-6 rounded-2xl glass-panel p-8 transition-all duration-300 hover:shadow-[0_0_15px_rgba(34,197,94,0.4)] hover:border-green-500/50 relative overflow-hidden">
-          <div className="absolute -right-20 -top-20 h-40 w-40 rounded-full bg-green-500/5 blur-3xl group-hover:bg-green-500/10 transition-colors" />
-          
-          <div className="flex items-start gap-4 relative z-10">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-green-500/10 text-green-500 border border-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.2)]">
-              <FileSpreadsheet className="h-6 w-6" />
-            </div>
-            <div>
-              <h3 className="font-bold text-ink text-lg tracking-wide">Asset Inventory</h3>
-              <p className="text-xs font-mono tracking-widest text-green-500 uppercase mt-1">CSV Raw Export</p>
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {reports.map((report) => (
+          <div key={report.id} className={cn("premium-card p-6 flex flex-col group", report.bg)}>
+            <div className="absolute -right-12 -top-12 rounded-full p-20 blur-[60px] opacity-50 bg-current text-inherit transition-all duration-500 group-hover:scale-125" style={{ color: "var(--tw-text-opacity)" }} />
+            <div className="premium-card-inner"></div>
+            
+            <div className="relative z-10 flex flex-col h-full">
+              <div className="flex items-start justify-between">
+                <div className={cn("premium-glass-icon p-3 w-14 h-14", report.color)}>
+                  <report.icon className="h-8 w-8 drop-shadow-[0_0_8px_currentColor]" />
+                </div>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 backdrop-blur-md px-3 py-1 text-xs font-semibold text-ink shadow-sm">
+                  <FileText className="h-3.5 w-3.5" /> PDF
+                </span>
+              </div>
+              
+              <div className="mt-6 flex-1">
+                <h3 className="text-xl font-bold text-ink drop-shadow-md">{report.title}</h3>
+                <p className="mt-2 text-sm text-muted/90 leading-relaxed">{report.description}</p>
+              </div>
+              
+              <div className="mt-8 pt-4 border-t border-white/10 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs text-muted font-medium">
+                  <Calendar className="h-4 w-4" />
+                  <span>Latest Snapshot</span>
+                </div>
+                
+                <button
+                  onClick={() => downloadReport(report.id, report.url)}
+                  disabled={downloading === report.id}
+                  className={cn(
+                    "relative flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-primary-foreground transition-all duration-300 overflow-hidden",
+                    downloading === report.id 
+                      ? "bg-primary/50 cursor-wait shadow-[0_0_15px_rgba(var(--color-primary)/0.2)]"
+                      : "bg-primary shadow-[0_0_15px_rgba(var(--color-primary)/0.5)] hover:bg-primary/90 hover:shadow-[0_0_25px_rgba(var(--color-primary)/0.7)] hover:scale-105"
+                  )}
+                >
+                  {downloading === report.id && (
+                    <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.2)_50%,transparent_75%,transparent_100%)] bg-[length:250%_250%,100%_100%] animate-[gradient_2s_linear_infinite]" />
+                  )}
+                  <Download className={cn("h-4 w-4 relative z-10", downloading === report.id && "animate-bounce")} />
+                  <span className="relative z-10">{downloading === report.id ? "Generating..." : "Download"}</span>
+                </button>
+              </div>
             </div>
           </div>
-          <p className="text-sm text-muted leading-relaxed flex-1 relative z-10">
-            Raw, unfiltered data export of all discovered and manually entered assets across your organization for external BI tools.
-          </p>
-          
-          <div className="flex flex-col gap-3 mt-auto relative z-10 pt-4 border-t border-border/50">
-            <label className="text-xs font-semibold text-muted uppercase tracking-wider">Scope Selection</label>
-            <select
-              value={scanIdAsset}
-              onChange={(e) => setScanIdAsset(e.target.value)}
-              className="h-10 w-full rounded-xl border border-border/50 bg-surface-hover/50 px-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-green-500/50 transition-all"
-            >
-              <option value="all">Global Workspace (All Scans)</option>
-              {scans?.filter(s => s.status === "completed").map((s) => (
-                <option key={s.id} value={s.id}>
-                  Scan Target: {s.target_cidr}
-                </option>
-              ))}
-            </select>
-            <button 
-              onClick={() => {
-                // Previously a raw window.location navigation, which sends no
-                // Authorization header — the export always failed with 401.
-                const url = scanIdAsset !== "all" ? `/assets/export/csv?scan_id=${scanIdAsset}` : "/assets/export/csv";
-                api
-                  .download(url, "omni-assets.csv")
-                  .catch((error) => alert(`Asset export failed: ${error.message}`));
-              }}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-surface-hover border border-border/50 px-4 py-3 text-sm font-semibold text-ink transition-all hover:bg-green-500 hover:text-white hover:border-green-500 hover:shadow-[0_0_15px_rgba(34,197,94,0.5)] mt-1"
-            >
-              <Download className="h-5 w-5" /> Export Data
-            </button>
-          </div>
-        </motion.div>
-      </motion.div>
+        ))}
+      </div>
     </div>
   );
 }
-

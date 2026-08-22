@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.core.deps import get_current_user, get_db, require_permission
+from app.core.rbac import Permission
 from app.models.graph import AttackPath
 from app.models.user import User
 
@@ -14,7 +15,7 @@ router = APIRouter()
 @router.get("/")
 def get_attack_paths(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(Permission.VIEW_ASSETS)),
 ) -> list[dict[str, Any]]:
     """
     Returns identified attack paths for the organization, sorted by risk.

@@ -25,6 +25,13 @@ from app.models.vulnerability_intel import (
     Cve, CpeMatch, EpssScore, IntelSyncState, KevEntry,
 )
 from app.models.graph import AttackPath, GraphEdge
+from app.models.discovery import AttackSurfaceDomain, CloudResource, IdentityProfile
+from app.models.agent import (
+    AgentActionProposal, AgentConversation, AgentMessage, GroundingStatus,
+    MessageRole, ProposalStatus,
+)
+from app.models.notification import Notification
+from app.models.integration import TicketIntegration
 
 __all__ = [
     "Organization", "User", "Role", "Permission", "role_permissions", "user_roles",
@@ -37,4 +44,8 @@ __all__ = [
     "BlockedIp", "CredentialProfile", "RemediationTask", "RiskAcceptance",
     "Cve", "CpeMatch", "EpssScore", "KevEntry", "IntelSyncState",
     "AttackPath", "GraphEdge",
+    "AttackSurfaceDomain", "CloudResource", "IdentityProfile",
+    "AgentConversation", "AgentMessage", "AgentActionProposal",
+    "MessageRole", "GroundingStatus", "ProposalStatus",
+    "Notification", "TicketIntegration",
 ]

@@ -1,12 +1,13 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity, BadgeDollarSign, BrainCircuit, Building2, Cloud, DatabaseZap, FileBarChart2,
   FileCheck2, Fingerprint, Globe, KeyRound, LayoutDashboard, Network, Radar,
   ScrollText, Server, Settings, ShieldAlert, ShieldCheck, Share2, Satellite,
-  Users, Wrench,
+  Users, Wrench, ChevronDown, ChevronRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth";
@@ -17,10 +18,6 @@ interface NavItem {
   href: string;
   label: string;
   icon: typeof LayoutDashboard;
-  /**
-   * `false` means the module is not built yet. It renders as a disabled row
-   * rather than a link to a page that would only look functional.
-   */
   built: boolean;
   requires?: Requirement;
 }
@@ -43,9 +40,9 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/assets", label: "Assets", icon: Server, built: true },
       { href: "/networks", label: "Sites & Networks", icon: Network, built: true },
-      { href: "/attack-surface", label: "Attack Surface", icon: Globe, built: false },
-      { href: "/cloud", label: "Cloud Assets", icon: Cloud, built: false },
-      { href: "/identity", label: "Identity", icon: Fingerprint, built: false },
+      { href: "/attack-surface", label: "Attack Surface", icon: Globe, built: true },
+      { href: "/cloud", label: "Cloud Assets", icon: Cloud, built: true },
+      { href: "/identity", label: "Identity", icon: Fingerprint, built: true },
     ],
   },
   {
@@ -99,10 +96,6 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-/**
- * Role gates below only hide navigation. Every request is authorized again on
- * the backend, so hiding a link is a convenience, never the control.
- */
 function isVisible(item: NavItem, user: ReturnType<typeof useAuthStore.getState>["user"]): boolean {
   if (!item.requires) return true;
   if (user?.is_super_admin) return true;
@@ -114,7 +107,6 @@ function isVisible(item: NavItem, user: ReturnType<typeof useAuthStore.getState>
     case "users":
       return roles.some((r) => ["organization_administrator", "security_manager"].includes(r));
     case "credentials":
-      // MANAGE_API_KEYS in the backend RBAC defaults.
       return roles.some((r) => r === "organization_administrator");
     case "scans":
       return roles.some((r) =>
@@ -129,11 +121,29 @@ export function Sidebar() {
   const pathname = usePathname();
   const user = useAuthStore((s) => s.user);
 
+  // Initialize expanded state: expand the group that contains the current active route
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const initialState: Record<string, boolean> = {};
+    NAV_GROUPS.forEach((group) => {
+      // expand if any child is active
+      const hasActive = group.items.some((item) => pathname === item.href || pathname.startsWith(item.href + "/"));
+      // Or just default all to true for now since it's a security dashboard
+      initialState[group.title] = hasActive || true; 
+    });
+    setExpanded(initialState);
+  }, [pathname]);
+
+  const toggleGroup = (title: string) => {
+    setExpanded((prev) => ({ ...prev, [title]: !prev[title] }));
+  };
+
   return (
     <aside className="hidden w-64 flex-col border-r border-border bg-surface/40 backdrop-blur-xl md:flex">
       <div className="relative flex h-20 items-center gap-3 overflow-hidden border-b border-primary/20 bg-surface/20 px-5 shadow-[0_4px_20px_rgba(var(--color-primary)/0.1)]">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(var(--color-primary)/0.15),transparent_70%)]" />
-        <div className="glossy-icon z-10 h-10 w-10 rounded-xl border border-primary/40 text-primary shadow-neon">
+        <div className="glossy-icon z-10 h-10 w-10 rounded-xl border border-primary/40 text-primary shadow-neon flex items-center justify-center">
           <ShieldCheck className="h-6 w-6" />
         </div>
         <div className="z-10">
@@ -143,17 +153,28 @@ export function Sidebar() {
         </div>
       </div>
 
-      <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
+      <nav className="flex-1 space-y-2 overflow-y-auto px-3 py-4">
         {NAV_GROUPS.map((group) => {
           const items = group.items.filter((item) => isVisible(item, user));
           if (items.length === 0) return null;
 
+          const isExpanded = expanded[group.title];
+
           return (
-            <div key={group.title}>
-              <p className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-[0.15em] text-muted/70">
-                {group.title}
-              </p>
-              <div className="space-y-0.5">
+            <div key={group.title} className="mb-2">
+              <button
+                onClick={() => toggleGroup(group.title)}
+                className="flex w-full items-center justify-between px-3 py-1.5 text-left transition-colors hover:bg-surface-hover rounded-lg group/btn"
+              >
+                <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted/80 group-hover/btn:text-ink transition-colors">
+                  {group.title}
+                </span>
+                <span className="text-muted/50 transition-colors group-hover/btn:text-muted">
+                  {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                </span>
+              </button>
+              
+              <div className={cn("mt-1 space-y-0.5 overflow-hidden transition-all duration-300 ease-in-out", isExpanded ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0")}>
                 {items.map(({ href, label, icon: Icon, built }) => {
                   const active = pathname === href || pathname.startsWith(href + "/");
 
@@ -162,7 +183,7 @@ export function Sidebar() {
                       <div
                         key={href}
                         title="This module is not implemented yet"
-                        className="flex cursor-not-allowed items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-muted/50"
+                        className="flex cursor-not-allowed items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-muted/40"
                       >
                         <span className="flex items-center gap-3">
                           <span className="rounded-lg p-1.5">
@@ -170,7 +191,7 @@ export function Sidebar() {
                           </span>
                           {label}
                         </span>
-                        <span className="rounded-full border border-border px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-muted/60">
+                        <span className="rounded-full border border-border/50 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-muted/50">
                           Not built
                         </span>
                       </div>
@@ -184,24 +205,30 @@ export function Sidebar() {
                       className={cn(
                         "group relative flex items-center gap-3 overflow-hidden rounded-lg px-3 py-2 text-sm font-medium transition-all duration-300",
                         active
-                          ? "neon-pulse-border border border-primary/50 bg-primary/15 text-primary shadow-[inset_0_0_20px_rgba(var(--color-primary)/0.3)]"
-                          : "text-ink/75 hover:translate-x-1 hover:bg-surface-hover hover:text-ink"
+                          ? "bg-primary/20 text-primary shadow-[inset_0_0_20px_rgba(var(--color-primary)/0.2)] border border-primary/40 backdrop-blur-md"
+                          : "text-ink/70 hover:bg-surface-hover hover:text-ink border border-transparent"
                       )}
                     >
                       {active && (
-                        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-primary/20 to-transparent" />
+                        <>
+                          <div className="absolute inset-0 bg-gradient-to-r from-primary/20 via-primary/5 to-transparent pointer-events-none" />
+                          <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary shadow-[0_0_10px_rgba(var(--color-primary)/0.8)]" />
+                        </>
                       )}
                       <div
                         className={cn(
-                          "z-10 rounded-lg p-1.5 transition-all duration-300",
+                          "z-10 rounded-lg p-1.5 transition-all duration-300 relative",
                           active
-                            ? "glossy-icon border border-primary shadow-[0_0_10px_rgba(var(--color-primary)/0.5)]"
-                            : "bg-surface group-hover:glossy-icon"
+                            ? "bg-primary/20 border border-primary/50 text-primary"
+                            : "bg-surface group-hover:border-white/10 border border-transparent"
                         )}
                       >
-                        <Icon size={15} className={cn(active && "drop-shadow-md")} />
+                        {active && (
+                          <div className="absolute inset-0 rounded-lg bg-primary/20 blur-md" />
+                        )}
+                        <Icon size={15} className={cn("relative z-10", active && "drop-shadow-[0_0_8px_currentColor]")} />
                       </div>
-                      <span className={cn("z-10 tracking-wide", active && "neon-text font-bold")}>
+                      <span className={cn("z-10 tracking-wide transition-colors", active ? "font-bold text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]" : "group-hover:text-ink font-medium")}>
                         {label}
                       </span>
                     </Link>
@@ -213,8 +240,8 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="border-t border-border p-4 text-center text-[11px] text-muted">
-        Powered by Omni Digital Solution
+      <div className="border-t border-border bg-surface/30 p-4 text-center text-[10px] uppercase tracking-wider text-muted/60">
+        Omni Digital Solution
       </div>
     </aside>
   );

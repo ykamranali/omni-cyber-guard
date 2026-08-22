@@ -74,7 +74,10 @@ html.light {
 
   /* LEGACY HUD CLASSES (Keep for compatibility with other pages for now, but tone down) */
   .jarvis-panel {
-    @apply bg-surface/40 backdrop-blur-md border border-primary/20 shadow-glass rounded-2xl relative overflow-hidden transition-all duration-300;
+    @apply bg-surface/40 backdrop-blur-2xl border border-primary/30 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1),_0_8px_32px_rgba(var(--color-primary)/0.2)] rounded-2xl relative overflow-hidden transition-all duration-300;
+  }
+  .jarvis-panel:hover {
+    @apply border-primary/50 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2),_0_12px_48px_rgba(var(--color-primary)/0.3)] -translate-y-0.5;
   }
   .hud-panel {
     @apply bg-surface/60 border border-primary/20 shadow-[inset_0_0_15px_rgba(var(--color-primary)/0.05)] rounded-2xl relative overflow-hidden transition-all duration-300;
@@ -87,6 +90,13 @@ html.light {
       radial-gradient(circle at 15% 50%, rgba(var(--color-primary)/0.03), transparent 30%),
       radial-gradient(circle at 85% 30%, rgba(var(--color-secondary)/0.03), transparent 30%);
     background-color: rgb(var(--color-background));
+  }
+  
+  .glossy-card {
+    @apply bg-surface/40 backdrop-blur-xl border border-white/5 rounded-xl shadow-[inset_0_1px_1px_rgba(255,255,255,0.1),_0_8px_32px_rgba(0,0,0,0.3)] relative overflow-hidden transition-all duration-300;
+  }
+  .glossy-card:hover {
+    @apply border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2),_0_12px_48px_rgba(0,0,0,0.4)] -translate-y-1;
   }
   
   .glossy-icon {

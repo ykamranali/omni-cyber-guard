@@ -66,6 +66,11 @@ class PDFReportGenerator:
         # Footer
         elements.append(Paragraph("Powered by Omni Digital Solution", self.styles['Italic']))
 
+        doc.build(elements)
+        pdf_bytes = buffer.getvalue()
+        buffer.close()
+        return pdf_bytes
+
     def generate_technical_report(self, scan_id: str | None = None) -> bytes:
         import uuid
         buffer = io.BytesIO()

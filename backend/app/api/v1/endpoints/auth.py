@@ -26,6 +26,7 @@ from app.core.security import (
     verify_password,
 )
 from app.db.session import get_db
+from app.db.tenancy import set_tenant
 from app.models.user import User
 from app.schemas.auth import LoginRequest, RefreshRequest, TokenResponse
 from app.services.audit import log_action
@@ -65,6 +66,7 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
 
     if user.locked_until is not None and user.locked_until > now:
         remaining = int((user.locked_until - now).total_seconds() // 60) + 1
+        set_tenant(db, user.organization_id)
         log_action(
             db, action="login_blocked_locked_account", resource_type="user",
             organization_id=user.organization_id, actor_user_id=user.id,
@@ -87,6 +89,7 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
         org_id = str(user.organization_id)
         db.commit()
 
+        set_tenant(db, org_id)
         log_action(
             db, action="login_failed", resource_type="user",
             organization_id=org_id, actor_user_id=user_id,
@@ -107,6 +110,7 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
     
     db.commit()
 
+    set_tenant(db, org_id)
     log_action(
         db, action="login", resource_type="user",
         organization_id=org_id, actor_user_id=user_id,

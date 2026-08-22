@@ -46,4 +46,7 @@ def downgrade():
     op.drop_index(op.f('ix_incidents_status'), table_name='incidents')
     op.drop_index(op.f('ix_incidents_organization_id'), table_name='incidents')
     op.drop_table('incidents')
-    # ### end Alembic commands ###
+    # The enum types created with the table are dropped too, so re-applying
+    # this revision after a downgrade does not fail on "type already exists".
+    op.execute("DROP TYPE IF EXISTS incidentstatus")
+    op.execute("DROP TYPE IF EXISTS incidentseverity")

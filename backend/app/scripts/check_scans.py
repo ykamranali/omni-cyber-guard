@@ -1,0 +1,1 @@
+import sys; sys.path.append("/app"); from app.db.session import SessionLocal; from app.db.tenancy import bypass_tenant; from app.models.scan_job import ScanJob; db = SessionLocal(); bypass_tenant(db); jobs = db.query(ScanJob).all(); print("\n".join([f"ID: {j.id}, Status: {j.status}, Target: {j.target_cidr}, Error: {j.error_message}" for j in jobs]))

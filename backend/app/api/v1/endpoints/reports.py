@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
-from app.core.deps import get_db, get_current_user
-from app.models.user import User
+from app.core.deps import get_db, get_current_user, require_permission
+from app.core.rbac import Permission
 from app.reports.pdf_generator import PDFReportGenerator
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -9,7 +9,7 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 @router.get("/executive/pdf")
 def download_executive_report_pdf(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(Permission.GENERATE_REPORTS)),
 ):
     """Generate and download the Executive Security Report in PDF format."""
     generator = PDFReportGenerator(db=db, org_id=current_user.organization_id)
@@ -27,7 +27,7 @@ def download_executive_report_pdf(
 def download_technical_report_pdf(
     scan_id: str | None = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(Permission.GENERATE_REPORTS)),
 ):
     """Generate and download the Technical Vulnerability Report in PDF format."""
     generator = PDFReportGenerator(db=db, org_id=current_user.organization_id)

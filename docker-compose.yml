@@ -54,6 +54,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    cap_drop:
+      - ALL
     volumes:
       - ./backend:/app
 

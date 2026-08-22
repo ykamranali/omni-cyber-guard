@@ -62,6 +62,9 @@ TENANT_TABLES = (
     "audit_logs",
     "users",
     "roles",
+    "agent_conversations",
+    "agent_messages",
+    "agent_action_proposals",
 )
 
 

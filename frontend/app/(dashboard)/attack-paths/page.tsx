@@ -36,10 +36,10 @@ export default function AttackPathsPage() {
   }, [fetchPaths]);
 
   const getSeverityBadge = (score: number) => {
-    if (score >= 90) return <Badge variant="destructive">Critical</Badge>;
-    if (score >= 70) return <Badge className="bg-orange-500 hover:bg-orange-600">High</Badge>;
-    if (score >= 40) return <Badge className="bg-yellow-500 hover:bg-yellow-600">Medium</Badge>;
-    return <Badge className="bg-blue-500 hover:bg-blue-600">Low</Badge>;
+    if (score >= 90) return <Badge label="critical" />;
+    if (score >= 70) return <Badge label="high" />;
+    if (score >= 40) return <Badge label="medium" />;
+    return <Badge label="low" />;
   };
 
   return (

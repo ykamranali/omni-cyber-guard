@@ -227,4 +227,13 @@ def downgrade():
     op.drop_table('permissions')
     op.drop_index(op.f('ix_organizations_slug'), table_name='organizations')
     op.drop_table('organizations')
-    # ### end Alembic commands ###
+
+    # Autogenerate drops tables but leaves the enum types it created behind, so
+    # `downgrade base` followed by `upgrade head` on the same database failed
+    # with "type already exists". Dropping them makes the chain genuinely
+    # reversible rather than reversible-once.
+    for type_name in (
+        "assetstatus", "assettype", "findingstatus", "scanstatus", "scantype",
+        "severity",
+    ):
+        op.execute(f"DROP TYPE IF EXISTS {type_name}")

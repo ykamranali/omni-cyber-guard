@@ -13,7 +13,10 @@ RUN curl -L https://github.com/projectdiscovery/nuclei/releases/download/v3.2.0/
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Create non-root user and switch to it
+RUN groupadd -r ocg_app && useradd -r -g ocg_app ocg_app
+COPY --chown=ocg_app:ocg_app . .
+USER ocg_app
 
 EXPOSE 8000
 

@@ -10,6 +10,7 @@ import uuid
 import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
+from tests.conftest import requires_db
 
 from app.core.deps import get_current_user, require_permission, require_super_admin
 from app.core.rbac import DEFAULT_ROLE_PERMISSIONS, Permission, RoleName
@@ -41,6 +42,7 @@ def test_access_and_refresh_tokens_are_distinguishable():
     assert decode_token(create_refresh_token(subject))["type"] == "refresh"
 
 
+@requires_db
 def test_refresh_token_is_rejected_as_an_access_token():
     """A refresh token must not authenticate an API call."""
     app = FastAPI()
@@ -54,6 +56,7 @@ def test_refresh_token_is_rejected_as_an_access_token():
     assert client.get("/whoami", headers={"Authorization": f"Bearer {token}"}).status_code == 401
 
 
+@requires_db
 def test_garbage_token_is_rejected():
     app = FastAPI()
 
