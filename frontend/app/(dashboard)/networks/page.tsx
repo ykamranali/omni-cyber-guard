@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertTriangle, Building2, CheckCircle2, Globe, Network as NetworkIcon, Plus, ShieldCheck, Trash2, Edit2
+  AlertTriangle, Building2, CheckCircle2, Globe, Network as NetworkIcon, Pencil, Plus,
+  ShieldCheck, Trash2,
 } from "lucide-react";
 import { Topbar } from "@/components/layout/topbar";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface Site {
@@ -40,6 +41,7 @@ export default function NetworksPage() {
   const [editingSite, setEditingSite] = useState<Site | null>(null);
   const [editingNetwork, setEditingNetwork] = useState<NetworkRange | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const { data: sites = [], isLoading: sitesLoading } = useQuery({
     queryKey: ["sites"],
@@ -62,26 +64,9 @@ export default function NetworksPage() {
     onError: (err: Error) => setError(err.message),
   });
 
-  const updateSite = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) => api.patch(`/sites/${id}`, body),
-    onSuccess: () => { invalidate(); setSiteModalOpen(false); setEditingSite(null); setError(null); },
-    onError: (err: Error) => setError(err.message),
-  });
-
-  const removeSite = useMutation({
-    mutationFn: (id: string) => api.delete(`/sites/${id}`),
-    onSuccess: invalidate,
-  });
-
   const createNetwork = useMutation({
     mutationFn: (body: Record<string, unknown>) => api.post("/networks", body),
     onSuccess: () => { invalidate(); setNetworkModalOpen(false); setError(null); },
-    onError: (err: Error) => setError(err.message),
-  });
-
-  const updateNetwork = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) => api.patch(`/networks/${id}`, body),
-    onSuccess: () => { invalidate(); setNetworkModalOpen(false); setEditingNetwork(null); setError(null); },
     onError: (err: Error) => setError(err.message),
   });
 
@@ -97,9 +82,54 @@ export default function NetworksPage() {
     onSuccess: invalidate,
   });
 
+  const updateSite = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
+      api.patch(`/sites/${id}`, body),
+    onSuccess: () => {
+      invalidate();
+      setSiteModalOpen(false);
+      setEditingSite(null);
+      setError(null);
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const removeSite = useMutation({
+    mutationFn: (id: string) => api.delete(`/sites/${id}`),
+    onSuccess: () => {
+      invalidate();
+      setActionError(null);
+    },
+    onError: (err) =>
+      setActionError(
+        err instanceof ApiError ? err.message : "The site could not be deleted.",
+      ),
+  });
+
+  const updateNetwork = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
+      api.patch(`/networks/${id}`, body),
+    onSuccess: () => {
+      invalidate();
+      setNetworkModalOpen(false);
+      setEditingNetwork(null);
+      setError(null);
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
   const removeNetwork = useMutation({
     mutationFn: (id: string) => api.delete(`/networks/${id}`),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      setActionError(null);
+    },
+    // Deleting a range that assets sit in can be refused by the API. Without
+    // this the button simply did nothing and said nothing.
+    onError: (err) =>
+      setActionError(
+        err instanceof ApiError ? err.message : "The network could not be deleted.",
+      ),
   });
 
   const authorizedCount = networks.filter((n) => n.is_authorized_scope).length;
@@ -108,6 +138,15 @@ export default function NetworksPage() {
     <>
       <Topbar title="Sites & Networks" />
       <main className="flex-1 space-y-6 overflow-y-auto p-6">
+        {actionError && (
+          <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-3 text-sm text-red-400">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span className="flex-1">{actionError}</span>
+            <button type="button" onClick={() => setActionError(null)} className="text-xs underline">
+              dismiss
+            </button>
+          </div>
+        )}
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-ink">Sites &amp; Networks</h1>
@@ -160,33 +199,42 @@ export default function NetworksPage() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {sites.map((site) => (
-                <div key={site.id} className="group rounded-xl border border-border bg-surface p-5 relative">
-                  <div className="absolute right-4 top-4 hidden gap-2 group-hover:flex">
-                    <button
-                      onClick={() => {
-                        setError(null);
-                        setEditingSite(site);
-                        setSiteModalOpen(true);
-                      }}
-                      className="text-muted hover:text-primary transition-colors"
-                      title="Edit site"
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (confirm(`Are you sure you want to delete ${site.name}?`)) {
-                          removeSite.mutate(site.id);
-                        }
-                      }}
-                      className="text-muted hover:text-critical transition-colors"
-                      title="Delete site"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                <div key={site.id} className="rounded-xl border border-border bg-surface p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="truncate font-semibold text-ink">{site.name}</h3>
+                      {site.location && <p className="text-xs text-muted">{site.location}</p>}
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingSite(site);
+                          setError(null);
+                          setSiteModalOpen(true);
+                        }}
+                        className="rounded-md p-1.5 text-muted hover:bg-primary/10 hover:text-primary"
+                        title={`Edit ${site.name}`}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const warning =
+                            site.network_count > 0 || site.asset_count > 0
+                              ? `${site.name} has ${site.network_count} network(s) and ${site.asset_count} asset(s). They are not deleted — they lose their site.`
+                              : `Delete ${site.name}?`;
+                          if (confirm(warning)) removeSite.mutate(site.id);
+                        }}
+                        disabled={removeSite.isPending}
+                        className="rounded-md p-1.5 text-muted hover:bg-critical/10 hover:text-critical disabled:opacity-40"
+                        title={`Delete ${site.name}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
-                  <h3 className="font-semibold text-ink pr-12">{site.name}</h3>
-                  {site.location && <p className="text-xs text-muted">{site.location}</p>}
                   {site.description && <p className="mt-2 text-sm text-muted">{site.description}</p>}
                   <div className="mt-4 flex gap-4 text-xs text-muted">
                     <span>{site.network_count} network{site.network_count === 1 ? "" : "s"}</span>
@@ -283,26 +331,31 @@ export default function NetworksPage() {
                         </button>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <div className="flex justify-end gap-3">
+                        <div className="flex items-center justify-end gap-1">
                           <button
+                            type="button"
                             onClick={() => {
-                              setError(null);
                               setEditingNetwork(network);
+                              setError(null);
                               setNetworkModalOpen(true);
                             }}
-                            className="text-muted transition-colors hover:text-primary"
-                            title="Edit network"
+                            className="rounded-md p-1.5 text-muted transition-colors hover:bg-primary/10 hover:text-primary"
+                            title={`Edit ${network.name}`}
                           >
-                            <Edit2 className="h-4 w-4" />
+                            <Pencil className="h-4 w-4" />
                           </button>
                           <button
+                            type="button"
                             onClick={() => {
-                              if (confirm(`Are you sure you want to remove ${network.name}?`)) {
-                                removeNetwork.mutate(network.id);
-                              }
+                              const warning =
+                                network.asset_count > 0
+                                  ? `${network.name} contains ${network.asset_count} asset(s). Deleting the range does not delete them — they lose their network, and with it the declared internet-exposure that feeds their exposure score. Continue?`
+                                  : `Delete ${network.name} (${network.cidr})?`;
+                              if (confirm(warning)) removeNetwork.mutate(network.id);
                             }}
-                            className="text-muted transition-colors hover:text-critical"
-                            title="Remove network"
+                            disabled={removeNetwork.isPending}
+                            className="rounded-md p-1.5 text-muted transition-colors hover:bg-critical/10 hover:text-critical disabled:opacity-40"
+                            title={`Delete ${network.name}`}
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -317,34 +370,46 @@ export default function NetworksPage() {
         </section>
       </main>
 
-      <Modal open={siteModalOpen} onClose={() => { setSiteModalOpen(false); setEditingSite(null); }} title={editingSite ? "Edit site" : "Add site"}>
+      <Modal
+        open={siteModalOpen}
+        onClose={() => {
+          setSiteModalOpen(false);
+          setEditingSite(null);
+        }}
+        title={editingSite ? "Edit site" : "Add site"}
+      >
         <SiteForm
-          initialData={editingSite}
+          key={editingSite?.id ?? "new"}
+          initial={editingSite}
           error={error}
           pending={createSite.isPending || updateSite.isPending}
-          onSubmit={(body) => {
-            if (editingSite) {
-              updateSite.mutate({ id: editingSite.id, body });
-            } else {
-              createSite.mutate(body);
-            }
-          }}
+          onSubmit={(body) =>
+            editingSite
+              ? updateSite.mutate({ id: editingSite.id, body })
+              : createSite.mutate(body)
+          }
         />
       </Modal>
 
-      <Modal open={networkModalOpen} onClose={() => { setNetworkModalOpen(false); setEditingNetwork(null); }} title={editingNetwork ? "Edit network" : "Add network"}>
+      <Modal
+        open={networkModalOpen}
+        onClose={() => {
+          setNetworkModalOpen(false);
+          setEditingNetwork(null);
+        }}
+        title={editingNetwork ? "Edit network" : "Add network"}
+      >
         <NetworkForm
-          initialData={editingNetwork}
+          key={editingNetwork?.id ?? "new"}
+          initial={editingNetwork}
           sites={sites}
           error={error}
           pending={createNetwork.isPending || updateNetwork.isPending}
-          onSubmit={(body) => {
-            if (editingNetwork) {
-              updateNetwork.mutate({ id: editingNetwork.id, body });
-            } else {
-              createNetwork.mutate(body);
-            }
-          }}
+          onSubmit={(body) =>
+            editingNetwork
+              ? updateNetwork.mutate({ id: editingNetwork.id, body })
+              : createNetwork.mutate(body)
+          }
         />
       </Modal>
     </>
@@ -365,16 +430,17 @@ const inputClass =
   "w-full rounded-md border border-border bg-surface-hover px-3 py-2 text-sm text-ink focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary";
 
 function SiteForm({
-  initialData, error, pending, onSubmit,
+  initial, error, pending, onSubmit,
 }: {
-  initialData?: Site | null;
+  /** Present when editing. Sites could be created but never corrected. */
+  initial?: Site | null;
   error: string | null;
   pending: boolean;
   onSubmit: (body: Record<string, unknown>) => void;
 }) {
-  const [name, setName] = useState(initialData?.name || "");
-  const [location, setLocation] = useState(initialData?.location || "");
-  const [description, setDescription] = useState(initialData?.description || "");
+  const [name, setName] = useState(initial?.name ?? "");
+  const [location, setLocation] = useState(initial?.location ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
 
   return (
     <form
@@ -395,28 +461,32 @@ function SiteForm({
       </Field>
       {error && <p className="text-sm text-critical">{error}</p>}
       <Button type="submit" disabled={!name || pending} className="w-full">
-        {pending ? "Saving…" : initialData ? "Update site" : "Create site"}
+        {pending ? "Saving…" : initial ? "Save changes" : "Create site"}
       </Button>
     </form>
   );
 }
 
 function NetworkForm({
-  initialData, sites, error, pending, onSubmit,
+  initial, sites, error, pending, onSubmit,
 }: {
-  initialData?: NetworkRange | null;
+  /**
+   * Present when editing. Only the two booleans were changeable before, so a
+   * mistyped CIDR or a range that moved site was permanent.
+   */
+  initial?: NetworkRange | null;
   sites: Site[];
   error: string | null;
   pending: boolean;
   onSubmit: (body: Record<string, unknown>) => void;
 }) {
-  const [name, setName] = useState(initialData?.name || "");
-  const [cidr, setCidr] = useState(initialData?.cidr || "");
-  const [siteId, setSiteId] = useState(initialData?.site_id || "");
-  const [vlan, setVlan] = useState(initialData?.vlan_id?.toString() || "");
-  const [internetFacing, setInternetFacing] = useState(initialData?.is_internet_facing || false);
-  const [authorized, setAuthorized] = useState(initialData?.is_authorized_scope || false);
-  const [note, setNote] = useState(initialData?.authorization_note || "");
+  const [name, setName] = useState(initial?.name ?? "");
+  const [cidr, setCidr] = useState(initial?.cidr ?? "");
+  const [siteId, setSiteId] = useState(initial?.site_id ?? "");
+  const [vlan, setVlan] = useState(initial?.vlan_id ? String(initial.vlan_id) : "");
+  const [internetFacing, setInternetFacing] = useState(initial?.is_internet_facing ?? false);
+  const [authorized, setAuthorized] = useState(initial?.is_authorized_scope ?? false);
+  const [note, setNote] = useState(initial?.authorization_note ?? "");
 
   return (
     <form
@@ -484,7 +554,7 @@ function NetworkForm({
 
       {error && <p className="text-sm text-critical">{error}</p>}
       <Button type="submit" disabled={!name || !cidr || pending} className="w-full">
-        {pending ? "Saving…" : initialData ? "Update network" : "Create network"}
+        {pending ? "Saving…" : initial ? "Save changes" : "Create network"}
       </Button>
     </form>
   );

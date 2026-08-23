@@ -20,6 +20,11 @@ class DashboardSummary(BaseModel):
     remediation_progress_percent: float
     open_findings: int
     remediated_findings_last_30_days: int
+    # Assessment coverage. Without these the dashboard cannot distinguish
+    # "nothing found" from "nothing assessed", which are the two states the
+    # whole product has to keep apart.
+    completed_scans: int = 0
+    last_scan_at: str | None = None
 
 
 class TrendPoint(BaseModel):

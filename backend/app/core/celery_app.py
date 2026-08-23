@@ -11,7 +11,13 @@ celery_app = Celery(
     "omni_cyber_guard",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["app.tasks.scan_tasks", "app.tasks.scheduler_tasks", "app.tasks.intel_tasks", "app.tasks.discovery_tasks"],
+    include=[
+        "app.tasks.scan_tasks",
+        "app.tasks.scheduler_tasks",
+        "app.tasks.intel_tasks",
+        "app.tasks.discovery_tasks",
+        "app.tasks.graph_tasks",
+    ],
 )
 
 celery_app.conf.update(
@@ -66,6 +72,14 @@ celery_app.conf.beat_schedule = {
     "expire-risk-acceptances-daily": {
         "task": "intel_tasks.expire_risk_acceptances",
         "schedule": crontab(hour="5", minute="45"),
+    },
+    # After correlation, so a CVE that became known-exploited overnight is
+    # reflected in path risk without waiting for a rescan. The graph is also
+    # rebuilt immediately after every scan completes; this is the catch-up for
+    # changes that did not come from a scan.
+    "rebuild-exposure-graphs-daily": {
+        "task": "graph_tasks.rebuild_all_graphs",
+        "schedule": crontab(hour="5", minute="20"),
     },
 }
 

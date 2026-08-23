@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, UserX, CheckCircle2, Edit2 } from "lucide-react";
+import { Plus, UserX, UserCheck, CheckCircle2, Pencil } from "lucide-react";
 
 import { Topbar } from "@/components/layout/topbar";
 import { Card } from "@/components/ui/card";
@@ -31,7 +31,6 @@ export default function UsersPage() {
   const { data: users, isLoading, isError } = useQuery({
     queryKey: ["users"],
     queryFn: () => api.get<UserOut[]>("/users"),
-    refetchInterval: 5000,
   });
   const { data: roles } = useQuery({
     queryKey: ["roles"],
@@ -49,19 +48,47 @@ export default function UsersPage() {
   });
 
   const updateUser = useMutation({
-    mutationFn: ({ id, values }: { id: string, values: Partial<UserFormValues> }) => api.patch<UserOut>(`/users/${id}`, values),
+    mutationFn: ({ id, values }: { id: string; values: UserFormValues }) =>
+      api.patch<UserOut>(`/users/${id}`, {
+        full_name: values.full_name,
+        role_names: values.role_names,
+        is_active: values.is_active ?? true,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       setModalOpen(false);
       setEditingUser(null);
       setError(null);
     },
-    onError: (err) => setError(err instanceof ApiError ? err.message : "Failed to update user"),
+    onError: (err) =>
+      setError(err instanceof ApiError ? err.message : "The user could not be saved."),
   });
 
   const deactivateUser = useMutation({
     mutationFn: (id: string) => api.delete(`/users/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["users"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      setError(null);
+    },
+    onError: (err) =>
+      setError(
+        err instanceof ApiError ? err.message : "The account could not be deactivated.",
+      ),
+  });
+
+  // Reactivation goes through the same PATCH the edit form uses, so there is
+  // one path that changes an account's state rather than two.
+  const reactivateUser = useMutation({
+    mutationFn: (user: UserOut) =>
+      api.patch<UserOut>(`/users/${user.id}`, { is_active: true }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      setError(null);
+    },
+    onError: (err) =>
+      setError(
+        err instanceof ApiError ? err.message : "The account could not be reactivated.",
+      ),
   });
 
   return (
@@ -114,25 +141,49 @@ export default function UsersPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <div className="flex justify-end gap-3">
+                        <div className="flex items-center justify-end gap-1">
                           <button
+                            type="button"
                             onClick={() => {
-                              setError(null);
                               setEditingUser(u);
+                              setError(null);
                               setModalOpen(true);
                             }}
-                            className="rounded-md p-1.5 text-muted hover:bg-primary/10 hover:text-primary transition-colors"
-                            title="Edit user"
+                            className="rounded-md p-1.5 text-muted hover:bg-primary/10 hover:text-primary"
+                            title={`Edit ${u.full_name}`}
                           >
-                            <Edit2 size={15} />
+                            <Pencil size={15} />
                           </button>
-                          {u.is_active && u.id !== currentUser?.id && (
+
+                          {u.is_active ? (
+                            u.id !== currentUser?.id && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (
+                                    confirm(
+                                      `Deactivate ${u.full_name}? They will be unable to sign in. The account and its audit history are kept, and this can be reversed.`,
+                                    )
+                                  ) {
+                                    deactivateUser.mutate(u.id);
+                                  }
+                                }}
+                                disabled={deactivateUser.isPending}
+                                className="rounded-md p-1.5 text-muted hover:bg-critical/10 hover:text-critical disabled:opacity-40"
+                                title="Deactivate user"
+                              >
+                                <UserX size={15} />
+                              </button>
+                            )
+                          ) : (
                             <button
-                              onClick={() => deactivateUser.mutate(u.id)}
-                              className="rounded-md p-1.5 text-muted hover:bg-critical/10 hover:text-critical"
-                              title="Deactivate user"
+                              type="button"
+                              onClick={() => reactivateUser.mutate(u)}
+                              disabled={reactivateUser.isPending}
+                              className="rounded-md p-1.5 text-muted hover:bg-low/10 hover:text-low disabled:opacity-40"
+                              title="Reactivate user"
                             >
-                              <UserX size={15} />
+                              <UserCheck size={15} />
                             </button>
                           )}
                         </div>
@@ -148,25 +199,30 @@ export default function UsersPage() {
 
       <UserFormModal
         open={modalOpen}
-        onClose={() => { setModalOpen(false); setEditingUser(null); }}
-        submitting={createUser.isPending || updateUser.isPending}
-        roles={roles || []}
-        initialData={editingUser ? {
-          email: editingUser.email,
-          full_name: editingUser.full_name,
-          role_names: editingUser.roles,
-        } : undefined}
-        onSubmit={(values) => {
-          if (editingUser) {
-            const updatePayload: Partial<UserFormValues> = { ...values };
-            if (!updatePayload.password) {
-              delete updatePayload.password;
-            }
-            updateUser.mutate({ id: editingUser.id, values: updatePayload });
-          } else {
-            createUser.mutate(values);
-          }
+        onClose={() => {
+          setModalOpen(false);
+          setEditingUser(null);
+          setError(null);
         }}
+        submitting={createUser.isPending || updateUser.isPending}
+        error={error}
+        initialValues={
+          editingUser
+            ? {
+                email: editingUser.email,
+                full_name: editingUser.full_name,
+                password: "",
+                role_names: editingUser.roles ?? [],
+                is_active: editingUser.is_active,
+              }
+            : null
+        }
+        roles={roles || []}
+        onSubmit={(values) =>
+          editingUser
+            ? updateUser.mutate({ id: editingUser.id, values })
+            : createUser.mutate(values)
+        }
       />
     </>
   );

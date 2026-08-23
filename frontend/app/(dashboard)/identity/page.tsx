@@ -1,201 +1,232 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { useAuthStore } from "@/store/auth";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Loader2, Users, ShieldAlert, Key, AlertTriangle, RefreshCw } from "lucide-react";
-import { format } from "date-fns";
-import { Button } from "@/components/ui/button";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, KeyRound, Loader2, ShieldCheck, ShieldX, Users } from "lucide-react";
+import { api, ApiError } from "@/lib/api";
+import {
+  IntegrationPanel, IntegrationState,
+} from "@/components/integrations/integration-panel";
+
+/**
+ * Directory accounts.
+ *
+ * MFA has three states here, not two. Null means the directory's user listing
+ * does not report factor enrolment — which is what Okta's `/api/v1/users` and
+ * Microsoft Graph's `/v1.0/users` actually return. The previous schema
+ * defaulted the column to `false`, so an account whose status was simply
+ * unknown was displayed as having MFA disabled: a security claim nobody made,
+ * and exactly the kind someone acts on.
+ */
+
+interface Identity {
+  id: string;
+  email: string;
+  full_name: string;
+  provider: string;
+  is_active: boolean;
+  mfa_enabled: boolean | null;
+  mfa_note: string;
+  last_login: string | null;
+  privilege_level: string | null;
+  last_seen: string | null;
+}
+
+interface IdentityResponse {
+  identities: Identity[];
+  integrations: IntegrationState[];
+  summary: {
+    total: number;
+    inactive: number;
+    mfa_enabled: number;
+    mfa_disabled: number;
+    mfa_unknown: number;
+  };
+  summary_note: string;
+  empty_state_note: string;
+}
+
+function MfaCell({ identity }: { identity: Identity }) {
+  if (identity.mfa_enabled === true) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400">
+        <ShieldCheck className="h-3.5 w-3.5" />
+        Enrolled
+      </span>
+    );
+  }
+  if (identity.mfa_enabled === false) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-red-400">
+        <ShieldX className="h-3.5 w-3.5" />
+        Not enrolled
+      </span>
+    );
+  }
+  return (
+    <span
+      className="cursor-help border-b border-dotted border-muted/50 text-xs text-muted"
+      title={identity.mfa_note}
+    >
+      Unknown
+    </span>
+  );
+}
 
 export default function IdentityPage() {
-  const [identities, setIdentities] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
+  const queryClient = useQueryClient();
 
-  const runSync = async (provider: string) => {
-    setIsSyncing(true);
-    try {
-      const token = useAuthStore.getState().accessToken;
-      await fetch("/api/v1/identity/scan", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ provider }),
-      });
-      alert(`Sync started for ${provider}. Waiting for background job to finish.`);
-      setTimeout(fetchIdentities, 3000);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to start identity sync.");
-    } finally {
-      setIsSyncing(false);
-    }
+  const { data, isLoading, error } = useQuery<IdentityResponse>({
+    queryKey: ["identity"],
+    queryFn: () => api.get<IdentityResponse>("/identity/"),
+  });
+
+  const runDiscovery = async (provider: string) => {
+    await api.post("/identity/scan", { provider });
+    await queryClient.invalidateQueries({ queryKey: ["identity"] });
   };
 
-  const fetchIdentities = useCallback(async () => {
-    try {
-      const token = useAuthStore.getState().accessToken;
-      if (!token) return;
-
-      const res = await fetch("/api/v1/identity/", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!res.ok) throw new Error("Failed to fetch identities");
-      const data = await res.json();
-      setIdentities(data);
-    } catch (err: any) {
-      console.error(err);
-      setError("Could not load identity data");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchIdentities();
-  }, [fetchIdentities]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex h-64 items-center justify-center text-red-500">
-        <AlertTriangle className="h-6 w-6 mr-2" />
-        {error}
+      <div className="p-6">
+        <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-400">
+          <AlertTriangle className="h-5 w-5" />
+          {error instanceof ApiError ? error.message : "Identities could not be loaded."}
+        </div>
       </div>
     );
   }
 
-  const adminCount = identities.filter(i => i.privilege_level.toUpperCase() === "ADMIN").length;
-  const noMfaCount = identities.filter(i => !i.mfa_enabled).length;
+  const identities = data?.identities ?? [];
+  const summary = data?.summary;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Identity & Access (ITDR)</h2>
-          <p className="text-muted-foreground">
-            Monitor corporate identities, privileges, and MFA posture synced from Entra ID / Okta.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => runSync("Entra ID")} disabled={isSyncing}>
-            {isSyncing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-            Sync Entra ID
-          </Button>
-          <Button variant="outline" onClick={() => runSync("Okta")} disabled={isSyncing}>
-            {isSyncing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-            Sync Okta
-          </Button>
-        </div>
+    <div className="space-y-6 p-6">
+      <div>
+        <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight text-ink">
+          <KeyRound className="h-8 w-8 text-primary" />
+          Identity
+        </h1>
+        <p className="mt-2 text-muted">
+          Accounts read from your directory. Nothing is inferred — a field the
+          directory does not return is shown as unknown.
+        </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Identities</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{identities.length}</div>
-            <p className="text-xs text-muted-foreground">Synched from IdPs</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Admin Accounts</CardTitle>
-            <Key className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{adminCount}</div>
-            <p className="text-xs text-muted-foreground">Highly privileged accounts</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Missing MFA</CardTitle>
-            <ShieldAlert className="h-4 w-4 text-red-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-500">{noMfaCount}</div>
-            <p className="text-xs text-muted-foreground">Accounts lacking MFA</p>
-          </CardContent>
-        </Card>
-      </div>
+      <section>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted">
+          Integrations
+        </h2>
+        <IntegrationPanel
+          integrations={data?.integrations ?? []}
+          onRun={runDiscovery}
+          runLabel="Read accounts"
+        />
+      </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Identity Inventory</CardTitle>
-          <CardDescription>
-            List of all synced user accounts and their security posture.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
+      {summary && (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            {[
+              { label: "Accounts", value: summary.total, icon: Users },
+              { label: "Disabled", value: summary.inactive, icon: ShieldX },
+              { label: "MFA enrolled", value: summary.mfa_enabled, icon: ShieldCheck },
+              { label: "MFA not enrolled", value: summary.mfa_disabled, icon: ShieldX },
+              { label: "MFA unknown", value: summary.mfa_unknown, icon: AlertTriangle },
+            ].map(({ label, value, icon: Icon }) => (
+              <div key={label} className="rounded-xl border border-border bg-surface p-5">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted">
+                    {label}
+                  </p>
+                  <Icon className="h-4 w-4 text-muted" />
+                </div>
+                <p className="mt-2 text-2xl font-bold text-ink">{value}</p>
+              </div>
+            ))}
+          </div>
+
+          {data?.summary_note && (
+            <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-amber-400">
+              {data.summary_note}
+            </p>
+          )}
+        </>
+      )}
+
+      <section className="rounded-xl border border-border bg-surface">
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="text-sm font-semibold text-ink">Accounts</h2>
+        </div>
+
+        {identities.length === 0 ? (
+          <div className="p-8 text-center text-sm text-muted">
+            {data?.empty_state_note || "No accounts have been read."}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-muted/50 text-left">
-                  <th className="p-4 font-medium">User</th>
-                  <th className="p-4 font-medium">Provider</th>
-                  <th className="p-4 font-medium">Status</th>
-                  <th className="p-4 font-medium">MFA Status</th>
-                  <th className="p-4 font-medium">Privilege</th>
-                  <th className="p-4 font-medium">Last Login</th>
+                <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted">
+                  <th className="px-5 py-3 font-medium">Account</th>
+                  <th className="px-5 py-3 font-medium">Provider</th>
+                  <th className="px-5 py-3 font-medium">State</th>
+                  <th className="px-5 py-3 font-medium">MFA</th>
+                  <th className="px-5 py-3 font-medium">Privilege</th>
+                  <th className="px-5 py-3 font-medium">Last login</th>
                 </tr>
               </thead>
               <tbody>
-                {identities.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="p-4 text-center text-muted-foreground">
-                      No identities discovered yet.
+                {identities.map((identity) => (
+                  <tr
+                    key={identity.id}
+                    className="border-b border-border/60 last:border-0 hover:bg-surface-hover"
+                  >
+                    <td className="px-5 py-3">
+                      <div className="font-medium text-ink">
+                        {identity.full_name || identity.email}
+                      </div>
+                      {identity.full_name && (
+                        <div className="text-[11px] text-muted">{identity.email}</div>
+                      )}
+                    </td>
+                    <td className="px-5 py-3 text-muted">{identity.provider}</td>
+                    <td className="px-5 py-3">
+                      <span
+                        className={
+                          identity.is_active ? "text-xs text-emerald-400" : "text-xs text-muted"
+                        }
+                      >
+                        {identity.is_active ? "Active" : "Disabled"}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3">
+                      <MfaCell identity={identity} />
+                    </td>
+                    <td className="px-5 py-3 text-muted">
+                      {identity.privilege_level || (
+                        <span className="text-xs">Not reported</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3 text-muted">
+                      {identity.last_login
+                        ? new Date(identity.last_login).toLocaleDateString()
+                        : "—"}
                     </td>
                   </tr>
-                ) : (
-                  identities.map((profile) => (
-                    <tr key={profile.id} className="border-b last:border-0 hover:bg-muted/30">
-                      <td className="p-4">
-                        <div className="flex flex-col">
-                          <span className="font-medium">{profile.full_name || profile.email.split("@")[0]}</span>
-                          <span className="text-xs text-muted-foreground">{profile.email}</span>
-                        </div>
-                      </td>
-                      <td className="p-4 text-muted-foreground">{profile.provider}</td>
-                      <td className="p-4">
-                        <Badge label={profile.is_active ? "active" : "inactive"} />
-                      </td>
-                      <td className="p-4">
-                        {profile.mfa_enabled ? (
-                          <Badge label="active" />
-                        ) : (
-                          <Badge label="critical" />
-                        )}
-                      </td>
-                      <td className="p-4">
-                        {profile.privilege_level.toUpperCase() === "ADMIN" ? (
-                          <Badge label="high" />
-                        ) : (
-                          <span className="text-muted-foreground">User</span>
-                        )}
-                      </td>
-                      <td className="p-4 text-muted-foreground">
-                        {profile.last_login ? format(new Date(profile.last_login), "PP p") : "Never"}
-                      </td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
-        </CardContent>
-      </Card>
+        )}
+      </section>
     </div>
   );
 }

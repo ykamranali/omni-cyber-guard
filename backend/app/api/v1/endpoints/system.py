@@ -8,7 +8,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import get_db, get_current_active_user
+from app.core.deps import get_db, require_permission
+from app.core.rbac import Permission
 from app.models.user import User
 from app.schemas.system import SystemStatusOut, ComponentStatus, NetworkInfoOut
 from fastapi import Request
@@ -20,7 +21,7 @@ router = APIRouter(prefix="/system", tags=["System"])
 @router.get("/status", response_model=SystemStatusOut)
 def system_status(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_permission(Permission.VIEW_ASSETS)),
 ):
     components: list[ComponentStatus] = []
 
@@ -50,7 +51,13 @@ def system_status(
     return SystemStatusOut(overall_status=overall, components=components)
 
 @router.get("/network-info", response_model=NetworkInfoOut)
-def get_network_info(request: Request, current_user: User = Depends(get_current_active_user)):
+def get_network_info(
+    request: Request,
+    current_user: User = Depends(require_permission(Permission.MANAGE_ORG_SETTINGS)),
+):
+    # This reports the server's own internal address. That is infrastructure
+    # detail, not security posture, so it is restricted to operators who
+    # administer the deployment rather than to anyone with a session.
     if settings.OVERRIDE_LOCAL_IP:
         local_ip = settings.OVERRIDE_LOCAL_IP
     else:
@@ -75,3 +82,21 @@ def get_network_info(request: Request, current_user: User = Depends(get_current_
         server_local_ip=local_ip
     )
 
+
+
+@router.get("/workers")
+def worker_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(Permission.VIEW_ASSETS)),
+):
+    """
+    Whether background processing is actually running.
+
+    This exists because of the single most confusing failure the product had:
+    a scan sits at QUEUED forever with nothing saying why. The row is correct —
+    it is queued — and no worker ever arrives to take it. The same silence
+    covers scheduled scans, CVE synchronisation and nightly snapshots.
+    """
+    from app.services.worker_health import check
+
+    return check(db).as_dict()

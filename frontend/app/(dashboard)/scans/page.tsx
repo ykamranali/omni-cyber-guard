@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 
 import { Topbar } from "@/components/layout/topbar";
+import { WorkerStatusBanner } from "@/components/system/worker-status-banner";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -159,6 +160,10 @@ export default function ScanCenterPage() {
         target_cidr: cidr,
         engine,
         credential_profile_id: credentialId || null,
+        // The operator's affirmation at launch. The backend requires it and
+        // separately checks the target against declared authorized scope; the
+        // checkbox below is what this carries.
+        authorization_confirmed: confirmedAuthorized,
       }),
     onSuccess: (job) => {
       queryClient.invalidateQueries({ queryKey: ["scans"] });
@@ -186,11 +191,26 @@ export default function ScanCenterPage() {
   });
 
   const deleteBulkScans = useMutation({
-    mutationFn: (ids: string[]) => api.delete("/scans/bulk", ids),
-    onSuccess: () => {
+    mutationFn: (ids: string[]) =>
+      api.delete<{ deleted: string[]; skipped: { id: string; reason: string }[] }>(
+        "/scans/bulk",
+        ids,
+      ),
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["scans"] });
       setSelectedScanIds(new Set());
       setExpandedId(null);
+      // Bulk delete used to return 204 and silently skip whatever it could not
+      // remove, so selecting ten rows could delete none of them and look like
+      // it had worked.
+      if (result?.skipped?.length) {
+        setError(
+          `${result.deleted.length} deleted. ${result.skipped.length} skipped: ` +
+            result.skipped.map((item) => item.reason).join(" "),
+        );
+      } else {
+        setError(null);
+      }
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : "Failed to delete scans"),
   });
@@ -222,6 +242,10 @@ export default function ScanCenterPage() {
     <>
       <Topbar title="Scan Center" />
       <main className="flex-1 space-y-6 overflow-y-auto p-6">
+        {/* A scan cannot progress without a worker. Saying so here is the
+            difference between "queued" meaning "starting shortly" and
+            "queued" meaning "nothing will ever pick this up". */}
+        <WorkerStatusBanner />
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">

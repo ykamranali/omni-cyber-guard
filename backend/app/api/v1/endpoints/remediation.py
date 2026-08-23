@@ -16,7 +16,7 @@ import uuid
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_permission
@@ -51,6 +51,7 @@ def list_tasks(
     assigned_to_me: bool = Query(default=False),
     overdue_only: bool = Query(default=False),
     open_only: bool = Query(default=True),
+    search: str | None = Query(default=None, max_length=200),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -69,6 +70,14 @@ def list_tasks(
         query = query.where(
             RemediationTask.due_date < date.today(),
             RemediationTask.status.notin_(list(TERMINAL_STATUSES)),
+        )
+    if search:
+        # Filtered server-side rather than in the browser, so the search box
+        # narrows the whole queue and not just the page that happened to load.
+        pattern = f"%{search.strip().lower()}%"
+        query = query.where(
+            func.lower(RemediationTask.title).like(pattern)
+            | func.lower(RemediationTask.description).like(pattern)
         )
 
     tasks = db.execute(

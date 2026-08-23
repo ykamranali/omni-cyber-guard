@@ -1,117 +1,219 @@
 "use client";
 
 import { useState } from "react";
-import { 
-  FileBarChart2, Download, FileText, 
-  ShieldCheck, Activity, Calendar
+import { useQuery } from "@tanstack/react-query";
+import {
+  Activity, AlertTriangle, CheckCircle2, Download, FileBarChart2, Loader2,
+  ShieldCheck,
 } from "lucide-react";
+import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-export default function ReportsPage() {
-  const [downloading, setDownloading] = useState<string | null>(null);
+/**
+ * Report downloads.
+ *
+ * Two things were broken and one was misleading.
+ *
+ * The download called `fetch("/api/v1/reports/…")` with **no second argument** —
+ * no Authorization header at all — against a path relative to the frontend
+ * origin. It could not have worked on any deployment. It now goes through
+ * `api.download`, which attaches the bearer token, handles 401 by signing the
+ * user out, and surfaces the API's own error detail.
+ *
+ * And the cards each carried a static "Latest Snapshot" label with nothing
+ * behind it. The panel now shows what the report will actually contain, read
+ * from the same figures the document is built from — so an operator can tell
+ * before downloading whether there is anything in it.
+ */
 
-  const downloadReport = async (type: string, url: string) => {
+interface DashboardSummary {
+  total_assets: number;
+  open_findings: number;
+  findings_by_severity: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+    info: number;
+  };
+  completed_scans: number;
+  last_scan_at: string | null;
+}
+
+const REPORTS = [
+  {
+    id: "executive",
+    title: "Executive Security Summary",
+    description:
+      "Assessment coverage, inventory size and open findings by severity, with the counting rules stated on the document.",
+    audience: "Leadership and board",
+    icon: ShieldCheck,
+    accent: "text-emerald-400",
+    surface: "border-emerald-500/30 bg-emerald-500/5",
+    path: "/reports/executive/pdf",
+    filename: "Executive_Security_Report.pdf",
+  },
+  {
+    id: "technical",
+    title: "Technical Vulnerability Report",
+    description:
+      "Every open finding with its class, confidence, source, CVE reference and the verbatim scanner evidence behind it.",
+    audience: "Engineering and remediation owners",
+    icon: Activity,
+    accent: "text-sky-400",
+    surface: "border-sky-500/30 bg-sky-500/5",
+    path: "/reports/technical/pdf",
+    filename: "Technical_Vulnerability_Report.pdf",
+  },
+] as const;
+
+export default function ReportsPage() {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [done, setDone] = useState<Record<string, boolean>>({});
+
+  const { data: summary } = useQuery<DashboardSummary>({
+    queryKey: ["dashboard", "summary"],
+    queryFn: () => api.get<DashboardSummary>("/dashboard/summary"),
+    retry: false,
+  });
+
+  const run = async (report: (typeof REPORTS)[number]) => {
+    setBusy(report.id);
+    setErrors((previous) => ({ ...previous, [report.id]: "" }));
+    setDone((previous) => ({ ...previous, [report.id]: false }));
+
+    const stamp = new Date().toISOString().slice(0, 10);
     try {
-      setDownloading(type);
-      // In a real app we'd fetch with auth headers, but assuming cookie-based or just triggering a download
-      const response = await fetch(`/api/v1/reports/${url}`);
-      
-      if (!response.ok) throw new Error("Download failed");
-      
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.download = `${type}_Report_${new Date().toISOString().split('T')[0]}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(downloadUrl);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error("Failed to download report:", error);
+      await api.download(report.path, report.filename.replace(".pdf", `_${stamp}.pdf`));
+      setDone((previous) => ({ ...previous, [report.id]: true }));
+    } catch (caught) {
+      setErrors((previous) => ({
+        ...previous,
+        [report.id]:
+          caught instanceof ApiError
+            ? caught.message
+            : "The download did not complete.",
+      }));
     } finally {
-      setDownloading(null);
+      setBusy(null);
     }
   };
 
-  const reports = [
-    {
-      id: "executive",
-      title: "Executive Security Summary",
-      description: "High-level overview of organizational risk, compliance posture, and remediation progress designed for C-suite and board members.",
-      icon: ShieldCheck,
-      color: "text-emerald-500",
-      bg: "bg-emerald-500/10 border-emerald-500/30 shadow-emerald-500/10",
-      url: "executive/pdf"
-    },
-    {
-      id: "technical",
-      title: "Technical Vulnerability Report",
-      description: "Detailed breakdown of discovered vulnerabilities, affected assets, CVSS/EPSS scores, and step-by-step remediation guidance for engineers.",
-      icon: Activity,
-      color: "text-blue-500",
-      bg: "bg-blue-500/10 border-blue-500/30 shadow-blue-500/10",
-      url: "technical/pdf"
-    }
-  ];
+  const noAssessment = (summary?.completed_scans ?? 0) === 0;
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex items-end justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-ink">Reports</h1>
-          <p className="mt-2 text-muted">Generate and download comprehensive security reports</p>
-        </div>
+      <div>
+        <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight text-ink">
+          <FileBarChart2 className="h-8 w-8 text-primary" />
+          Reports
+        </h1>
+        <p className="mt-2 text-muted">
+          Generated from your live data at the moment you download them. Nothing
+          is pre-rendered or cached.
+        </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {reports.map((report) => (
-          <div key={report.id} className={cn("premium-card p-6 flex flex-col group", report.bg)}>
-            <div className="absolute -right-12 -top-12 rounded-full p-20 blur-[60px] opacity-50 bg-current text-inherit transition-all duration-500 group-hover:scale-125" style={{ color: "var(--tw-text-opacity)" }} />
-            <div className="premium-card-inner"></div>
-            
-            <div className="relative z-10 flex flex-col h-full">
-              <div className="flex items-start justify-between">
-                <div className={cn("premium-glass-icon p-3 w-14 h-14", report.color)}>
-                  <report.icon className="h-8 w-8 drop-shadow-[0_0_8px_currentColor]" />
-                </div>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 backdrop-blur-md px-3 py-1 text-xs font-semibold text-ink shadow-sm">
-                  <FileText className="h-3.5 w-3.5" /> PDF
-                </span>
-              </div>
-              
-              <div className="mt-6 flex-1">
-                <h3 className="text-xl font-bold text-ink drop-shadow-md">{report.title}</h3>
-                <p className="mt-2 text-sm text-muted/90 leading-relaxed">{report.description}</p>
-              </div>
-              
-              <div className="mt-8 pt-4 border-t border-white/10 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs text-muted font-medium">
-                  <Calendar className="h-4 w-4" />
-                  <span>Latest Snapshot</span>
-                </div>
-                
-                <button
-                  onClick={() => downloadReport(report.id, report.url)}
-                  disabled={downloading === report.id}
+      {noAssessment && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+          <div className="text-sm">
+            <p className="font-medium text-amber-400">No completed assessment yet</p>
+            <p className="mt-1 text-ink/90">
+              These reports will still generate, and will say so on the first
+              page. A report of zero findings from zero scans is not a clean
+              result — it means nothing has been assessed.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {summary && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { label: "Completed assessments", value: summary.completed_scans ?? 0 },
+            { label: "Assets in inventory", value: summary.total_assets ?? 0 },
+            { label: "Open findings", value: summary.open_findings ?? 0 },
+            { label: "Critical", value: summary.findings_by_severity?.critical ?? 0 },
+          ].map((item) => (
+            <div key={item.label} className="rounded-xl border border-border bg-surface p-5">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted">
+                {item.label}
+              </p>
+              <p className="mt-2 text-2xl font-bold text-ink">{item.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        {REPORTS.map((report) => {
+          const { icon: Icon } = report;
+          return (
+            <div
+              key={report.id}
+              className={cn(
+                "flex flex-col rounded-xl border p-6",
+                report.surface,
+              )}
+            >
+              <div className="flex items-start gap-4">
+                <div
                   className={cn(
-                    "relative flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-primary-foreground transition-all duration-300 overflow-hidden",
-                    downloading === report.id 
-                      ? "bg-primary/50 cursor-wait shadow-[0_0_15px_rgba(var(--color-primary)/0.2)]"
-                      : "bg-primary shadow-[0_0_15px_rgba(var(--color-primary)/0.5)] hover:bg-primary/90 hover:shadow-[0_0_25px_rgba(var(--color-primary)/0.7)] hover:scale-105"
+                    "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border bg-surface",
+                    report.accent,
                   )}
                 >
-                  {downloading === report.id && (
-                    <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.2)_50%,transparent_75%,transparent_100%)] bg-[length:250%_250%,100%_100%] animate-[gradient_2s_linear_infinite]" />
-                  )}
-                  <Download className={cn("h-4 w-4 relative z-10", downloading === report.id && "animate-bounce")} />
-                  <span className="relative z-10">{downloading === report.id ? "Generating..." : "Download"}</span>
-                </button>
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-base font-semibold text-ink">{report.title}</h2>
+                  <p className="mt-0.5 text-[11px] uppercase tracking-wider text-muted">
+                    {report.audience}
+                  </p>
+                </div>
               </div>
+
+              <p className="mt-4 flex-1 text-sm text-ink/90">{report.description}</p>
+
+              {errors[report.id] && (
+                <p className="mt-3 text-xs text-red-400">{errors[report.id]}</p>
+              )}
+
+              <button
+                type="button"
+                onClick={() => run(report)}
+                disabled={busy === report.id}
+                className="mt-5 inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {busy === report.id ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Generating…
+                  </>
+                ) : done[report.id] ? (
+                  <>
+                    <CheckCircle2 className="h-4 w-4" />
+                    Downloaded — generate again
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    Download PDF
+                  </>
+                )}
+              </button>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+
+      <p className="text-xs text-muted">
+        Coverage is limited to what your completed assessments actually targeted.
+        Anything outside their scope is unassessed, not clean — both documents
+        state this.
+      </p>
     </div>
   );
 }

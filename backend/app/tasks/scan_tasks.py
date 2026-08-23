@@ -591,6 +591,22 @@ def run_network_scan(scan_job_id: str) -> None:
         )
         db.commit()
 
+        # The inventory just changed, so the exposure graph and the attack
+        # paths derived from it are stale. Dispatched rather than computed
+        # inline so a slow rebuild cannot make a finished scan look unfinished,
+        # and swallowed on failure for the same reason — the scan itself
+        # succeeded, and its record must not be rewritten by a downstream
+        # problem.
+        try:
+            from app.tasks.graph_tasks import rebuild_exposure_graph
+
+            rebuild_exposure_graph.delay(str(job.organization_id))
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "scan %s: completed, but the exposure graph rebuild could not "
+                "be queued", scan_job_id,
+            )
+
     except Exception as exc:
         logger.exception("scan %s: unexpected failure", scan_job_id)
         db.rollback()

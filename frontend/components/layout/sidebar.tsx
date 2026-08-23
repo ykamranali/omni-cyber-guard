@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth";
+import { useBranding } from "@/components/providers/branding-provider";
 
 type Requirement = "super_admin" | "users" | "scans" | "credentials";
 
@@ -120,6 +121,7 @@ function isVisible(item: NavItem, user: ReturnType<typeof useAuthStore.getState>
 export function Sidebar() {
   const pathname = usePathname();
   const user = useAuthStore((s) => s.user);
+  const { branding } = useBranding();
 
   // Initialize expanded state: expand the group that contains the current active route
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -128,9 +130,12 @@ export function Sidebar() {
     const initialState: Record<string, boolean> = {};
     NAV_GROUPS.forEach((group) => {
       // expand if any child is active
-      const hasActive = group.items.some((item) => pathname === item.href || pathname.startsWith(item.href + "/"));
-      // Or just default all to true for now since it's a security dashboard
-      initialState[group.title] = hasActive || true; 
+      // Groups containing the current route open; the rest stay collapsed.
+      // This line previously read `hasActive || true`, so the condition was
+      // computed and discarded and every group was always open.
+      initialState[group.title] = group.items.some(
+        (item) => pathname === item.href || pathname.startsWith(item.href + "/"),
+      );
     });
     setExpanded(initialState);
   }, [pathname]);
@@ -143,12 +148,26 @@ export function Sidebar() {
     <aside className="hidden w-64 flex-col border-r border-border bg-surface/40 backdrop-blur-xl md:flex">
       <div className="relative flex h-20 items-center gap-3 overflow-hidden border-b border-primary/20 bg-surface/20 px-5 shadow-[0_4px_20px_rgba(var(--color-primary)/0.1)]">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(var(--color-primary)/0.15),transparent_70%)]" />
-        <div className="glossy-icon z-10 h-10 w-10 rounded-xl border border-primary/40 text-primary shadow-neon flex items-center justify-center">
-          <ShieldCheck className="h-6 w-6" />
+        <div className="glossy-icon z-10 flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-primary/40 text-primary shadow-neon">
+          {branding.logo_url ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={branding.logo_url}
+              alt={branding.name}
+              className="h-full w-full object-contain"
+              onError={(event) => {
+                // A broken logo URL must not leave an empty box where the
+                // brand mark should be.
+                event.currentTarget.style.display = "none";
+              }}
+            />
+          ) : (
+            <ShieldCheck className="h-6 w-6" />
+          )}
         </div>
-        <div className="z-10">
-          <p className="neon-text text-[15px] font-bold uppercase tracking-wider text-ink">
-            Omni Cyber Guard
+        <div className="z-10 min-w-0">
+          <p className="neon-text truncate text-[15px] font-bold uppercase tracking-wider text-ink">
+            {branding.name}
           </p>
         </div>
       </div>
@@ -203,32 +222,26 @@ export function Sidebar() {
                       key={href}
                       href={href}
                       className={cn(
-                        "group relative flex items-center gap-3 overflow-hidden rounded-lg px-3 py-2 text-sm font-medium transition-all duration-300",
+                        "group relative flex items-center gap-3 overflow-hidden rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
                         active
-                          ? "bg-primary/20 text-primary shadow-[inset_0_0_20px_rgba(var(--color-primary)/0.2)] border border-primary/40 backdrop-blur-md"
-                          : "text-ink/70 hover:bg-surface-hover hover:text-ink border border-transparent"
+                          ? "neon-pulse-border border border-primary/50 bg-primary/15 text-primary shadow-[inset_0_0_20px_rgba(var(--color-primary)/0.3)]"
+                          : "text-ink/70 hover:bg-surface-hover hover:text-ink"
                       )}
                     >
                       {active && (
-                        <>
-                          <div className="absolute inset-0 bg-gradient-to-r from-primary/20 via-primary/5 to-transparent pointer-events-none" />
-                          <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary shadow-[0_0_10px_rgba(var(--color-primary)/0.8)]" />
-                        </>
+                        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-primary/10 to-transparent" />
                       )}
                       <div
                         className={cn(
-                          "z-10 rounded-lg p-1.5 transition-all duration-300 relative",
+                          "z-10 rounded-lg p-1.5 transition-all duration-300",
                           active
-                            ? "bg-primary/20 border border-primary/50 text-primary"
-                            : "bg-surface group-hover:border-white/10 border border-transparent"
+                            ? "glossy-icon border border-primary shadow-[0_0_10px_rgba(var(--color-primary)/0.5)] bg-primary/10"
+                            : "bg-surface group-hover:glossy-icon border border-transparent"
                         )}
                       >
-                        {active && (
-                          <div className="absolute inset-0 rounded-lg bg-primary/20 blur-md" />
-                        )}
-                        <Icon size={15} className={cn("relative z-10", active && "drop-shadow-[0_0_8px_currentColor]")} />
+                        <Icon size={15} className={cn(active && "drop-shadow-[0_0_8px_rgba(var(--color-primary)/0.8)]")} />
                       </div>
-                      <span className={cn("z-10 tracking-wide transition-colors", active ? "font-bold text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]" : "group-hover:text-ink font-medium")}>
+                      <span className={cn("z-10 tracking-wide transition-colors", active ? "neon-text font-bold" : "group-hover:text-ink font-medium")}>
                         {label}
                       </span>
                     </Link>
@@ -241,7 +254,7 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-border bg-surface/30 p-4 text-center text-[10px] uppercase tracking-wider text-muted/60">
-        Omni Digital Solution
+        {branding.footer_text}
       </div>
     </aside>
   );

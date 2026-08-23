@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
+import { BRANDING_INIT_SCRIPT } from "@/lib/branding";
 
 export const metadata: Metadata = {
   title: "Omni Cyber Guard | Omni Digital Solution",
@@ -26,6 +27,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className="dark">
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        {/* Applies the organization's saved colours before first paint, from
+            the cached value, so a branded deployment does not flash the
+            default palette on every navigation. */}
+        <script dangerouslySetInnerHTML={{ __html: BRANDING_INIT_SCRIPT }} />
       </head>
       <body>
         <Providers>{children}</Providers>

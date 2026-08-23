@@ -88,26 +88,30 @@ export default function ExposurePage() {
   const queryClient = useQueryClient();
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
 
+  // Exposure changes whenever a scan finishes or intelligence correlates, both
+  // of which happen in a worker. These queries carry the "exposure" key prefix
+  // the WebSocket provider invalidates on those events, and refresh on their
+  // own as a fallback for when the socket is down.
   const { data: overview } = useQuery({
-    queryKey: ["exposure-overview"],
+    queryKey: ["exposure", "overview"],
     queryFn: () => api.get<Overview>("/exposure/overview"),
-    refetchInterval: 5000,
+    refetchInterval: 60_000,
   });
 
   const { data: topAssets = [] } = useQuery({
-    queryKey: ["exposure-top-assets"],
+    queryKey: ["exposure", "top-assets"],
     queryFn: () => api.get<TopAsset[]>("/exposure/top-assets?limit=10"),
-    refetchInterval: 5000,
+    refetchInterval: 60_000,
   });
 
   const { data: trend } = useQuery({
-    queryKey: ["exposure-trend"],
+    queryKey: ["exposure", "trend"],
     queryFn: () => api.get<{ points: TrendPoint[]; note: string | null }>("/exposure/trend?days=30"),
-    refetchInterval: 5000,
+    refetchInterval: 300_000,
   });
 
   const { data: detail } = useQuery({
-    queryKey: ["exposure-asset", selectedAssetId],
+    queryKey: ["exposure", "asset", selectedAssetId],
     queryFn: () => api.get<AssetExposure>(`/exposure/assets/${selectedAssetId}`),
     enabled: !!selectedAssetId,
   });
@@ -115,9 +119,9 @@ export default function ExposurePage() {
   const recompute = useMutation({
     mutationFn: () => api.post("/exposure/recompute"),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["exposure-overview"] });
-      queryClient.invalidateQueries({ queryKey: ["exposure-top-assets"] });
-      queryClient.invalidateQueries({ queryKey: ["exposure-trend"] });
+      // One prefix covers all of them, and matches what the WebSocket
+      // provider invalidates when a scan or correlation completes.
+      queryClient.invalidateQueries({ queryKey: ["exposure"] });
     },
   });
 

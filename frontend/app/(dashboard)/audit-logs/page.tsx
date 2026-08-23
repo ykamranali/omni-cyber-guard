@@ -1,157 +1,401 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { 
-  ScrollText, Search, Filter, ShieldAlert,
-  User, Database, Server, RefreshCw
+import { useEffect, useMemo, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import {
+  AlertTriangle, ChevronLeft, ChevronRight, Download, FileClock, Loader2,
+  Search, X,
 } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
-import { api } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { api, ApiError } from "@/lib/api";
 
-interface AuditLog {
+/**
+ * Audit log.
+ *
+ * The search box previously set state that nothing read, the "Filter" and
+ * "Export Logs" buttons had no handlers at all, and the fetch ran once on mount
+ * with no parameters — so the page showed the fifty most recent entries and
+ * offered three controls that did nothing.
+ *
+ * Every filter here is sent to the server, the export applies the same filters
+ * the screen is showing, and the pagination uses the `total` the response has
+ * always carried.
+ */
+
+const PAGE_SIZE = 50;
+const SEARCH_DEBOUNCE_MS = 300;
+
+interface AuditEntry {
   id: string;
   action: string;
   resource_type: string;
-  resource_id: string;
-  ip_address: string;
-  created_at: string;
+  resource_id: string | null;
+  ip_address: string | null;
+  created_at: string | null;
   actor_user_id: string | null;
   actor_email: string | null;
-  metadata: any;
+  actor_name: string | null;
+  actor_note: string;
+  metadata: Record<string, unknown>;
 }
 
-interface AuditLogResponse {
-  items: AuditLog[];
+interface AuditResponse {
+  items: AuditEntry[];
   total: number;
   skip: number;
   limit: number;
 }
 
+interface FilterOptions {
+  actions: string[];
+  resource_types: string[];
+  actors: { id: string; email: string; full_name: string }[];
+}
+
+interface Filters {
+  search: string;
+  action: string;
+  resource_type: string;
+  actor_user_id: string;
+  date_from: string;
+  date_to: string;
+}
+
+const EMPTY_FILTERS: Filters = {
+  search: "",
+  action: "",
+  resource_type: "",
+  actor_user_id: "",
+  date_from: "",
+  date_to: "",
+};
+
+function toQuery(filters: Filters, skip: number): string {
+  const params = new URLSearchParams();
+  params.set("skip", String(skip));
+  params.set("limit", String(PAGE_SIZE));
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) params.set(key, value);
+  }
+  return params.toString();
+}
+
+function exportQuery(filters: Filters): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
 export default function AuditLogsPage() {
-  const [data, setData] = useState<AuditLogResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [searchInput, setSearchInput] = useState("");
+  const [skip, setSkip] = useState(0);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
 
+  // Debounced so typing does not fire a request per keystroke.
   useEffect(() => {
-    fetchLogs();
-  }, []);
+    const timer = setTimeout(() => {
+      setFilters((previous) => ({ ...previous, search: searchInput }));
+      setSkip(0);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
-  const fetchLogs = async () => {
+  const { data, isLoading, isFetching, error } = useQuery<AuditResponse>({
+    queryKey: ["audit-logs", filters, skip],
+    queryFn: () => api.get<AuditResponse>(`/audit-logs?${toQuery(filters, skip)}`),
+    placeholderData: keepPreviousData,
+  });
+
+  const { data: options } = useQuery<FilterOptions>({
+    queryKey: ["audit-logs", "filters"],
+    queryFn: () => api.get<FilterOptions>("/audit-logs/filters"),
+  });
+
+  const setFilter = (key: keyof Filters, value: string) => {
+    setFilters((previous) => ({ ...previous, [key]: value }));
+    setSkip(0);
+  };
+
+  const activeFilterCount = useMemo(
+    () => Object.values(filters).filter(Boolean).length,
+    [filters],
+  );
+
+  const runExport = async () => {
+    setExporting(true);
+    setExportError("");
+    const stamp = new Date().toISOString().slice(0, 10);
     try {
-      const res = await api.get<AuditLogResponse>("/audit-logs");
-      setData(res);
-    } catch (error) {
-      console.error("Failed to load audit logs:", error);
+      await api.download(
+        `/audit-logs/export.pdf${exportQuery(filters)}`,
+        `audit-log-${stamp}.pdf`,
+      );
+    } catch (caught) {
+      setExportError(
+        caught instanceof ApiError ? caught.message : "The export did not complete.",
+      );
     } finally {
-      setLoading(false);
+      setExporting(false);
     }
   };
 
-  const getActionColor = (action: string) => {
-    if (action.includes("delete") || action.includes("remove") || action.includes("block")) return "text-rose-500 bg-rose-500/10 border-rose-500/20";
-    if (action.includes("create") || action.includes("add") || action.includes("resolve")) return "text-emerald-500 bg-emerald-500/10 border-emerald-500/20";
-    if (action.includes("update") || action.includes("modify")) return "text-amber-500 bg-amber-500/10 border-amber-500/20";
-    return "text-blue-500 bg-blue-500/10 border-blue-500/20";
-  };
-
-  if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <RefreshCw className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted">Loading Audit Logs...</p>
-        </div>
-      </div>
-    );
-  }
+  const entries = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const page = Math.floor(skip / PAGE_SIZE) + 1;
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex items-end justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-ink">Audit Logs</h1>
-          <p className="mt-2 text-muted">System-wide activity monitoring and compliance tracking</p>
+          <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight text-ink">
+            <FileClock className="h-8 w-8 text-primary" />
+            Audit Log
+          </h1>
+          <p className="mt-2 text-muted">
+            Every recorded action in this organization, with who performed it and
+            from where.
+          </p>
         </div>
-        <button className="flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-ink transition-all hover:bg-surface-hover">
-          Export Logs
-        </button>
+
+        <div className="flex items-center gap-2">
+          {exportError && (
+            <span className="text-xs text-red-400">{exportError}</span>
+          )}
+          <button
+            type="button"
+            onClick={runExport}
+            disabled={exporting}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {exporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Export PDF
+            {activeFilterCount > 0 && (
+              <span className="rounded bg-black/20 px-1.5 py-0.5 text-[10px]">
+                filtered
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
-      <div className="rounded-xl border border-border bg-surface shadow-lg backdrop-blur-xl">
-        <div className="flex items-center justify-between border-b border-border p-4">
-          <div className="flex items-center gap-4">
+      <section className="rounded-xl border border-border bg-surface p-4">
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-6">
+          <div className="lg:col-span-2">
+            <label className="mb-1 block text-[11px] font-medium text-muted">
+              Search
+            </label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
               <input
-                type="text"
-                placeholder="Search logs..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="h-10 w-64 rounded-lg border border-border bg-surface-hover pl-9 pr-4 text-sm text-ink placeholder:text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder="Name, email, action, resource, IP…"
+                className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-8 text-sm text-ink placeholder:text-muted focus:border-primary focus:outline-none"
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={() => setSearchInput("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-ink"
+                  aria-label="Clear search"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-[11px] font-medium text-muted">Actor</label>
+            <select
+              value={filters.actor_user_id}
+              onChange={(event) => setFilter("actor_user_id", event.target.value)}
+              className="h-9 w-full rounded-lg border border-border bg-background px-2 text-sm text-ink focus:border-primary focus:outline-none"
+            >
+              <option value="">Anyone</option>
+              {options?.actors.map((actor) => (
+                <option key={actor.id} value={actor.id}>
+                  {actor.full_name || actor.email}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-[11px] font-medium text-muted">Action</label>
+            <select
+              value={filters.action}
+              onChange={(event) => setFilter("action", event.target.value)}
+              className="h-9 w-full rounded-lg border border-border bg-background px-2 text-sm text-ink focus:border-primary focus:outline-none"
+            >
+              <option value="">Any action</option>
+              {/* Derived from the data, so this can never offer a value that
+                  returns nothing, nor omit an action a new feature records. */}
+              {options?.actions.map((action) => (
+                <option key={action} value={action}>
+                  {action.replace(/_/g, " ")}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-[11px] font-medium text-muted">
+              Resource
+            </label>
+            <select
+              value={filters.resource_type}
+              onChange={(event) => setFilter("resource_type", event.target.value)}
+              className="h-9 w-full rounded-lg border border-border bg-background px-2 text-sm text-ink focus:border-primary focus:outline-none"
+            >
+              <option value="">Any resource</option>
+              {options?.resource_types.map((type) => (
+                <option key={type} value={type}>
+                  {type.replace(/_/g, " ")}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-muted">From</label>
+              <input
+                type="date"
+                value={filters.date_from}
+                onChange={(event) => setFilter("date_from", event.target.value)}
+                className="h-9 w-full rounded-lg border border-border bg-background px-2 text-xs text-ink focus:border-primary focus:outline-none"
               />
             </div>
-            <button className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-hover">
-              <Filter className="h-4 w-4" /> Filter
-            </button>
-          </div>
-          <div className="text-sm text-muted">
-            Total Records: <span className="font-bold text-ink">{data?.total.toLocaleString() || 0}</span>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-muted">To</label>
+              <input
+                type="date"
+                value={filters.date_to}
+                onChange={(event) => setFilter("date_to", event.target.value)}
+                className="h-9 w-full rounded-lg border border-border bg-background px-2 text-xs text-ink focus:border-primary focus:outline-none"
+              />
+            </div>
           </div>
         </div>
 
-        {data?.items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <ScrollText className="mb-4 h-12 w-12 text-muted/30" />
-            <p className="text-lg font-medium text-ink">No Activity Found</p>
-            <p className="mt-1 text-sm text-muted">There are no audit logs recorded for your organization yet.</p>
+        {activeFilterCount > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              setFilters(EMPTY_FILTERS);
+              setSearchInput("");
+              setSkip(0);
+            }}
+            className="mt-3 text-xs font-medium text-primary hover:underline"
+          >
+            Clear {activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"}
+          </button>
+        )}
+      </section>
+
+      {error && (
+        <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-400">
+          <AlertTriangle className="h-5 w-5" />
+          {error instanceof ApiError ? error.message : "The audit log could not be loaded."}
+        </div>
+      )}
+
+      <section className="rounded-xl border border-border bg-surface">
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+          <p className="text-xs text-muted">
+            {total.toLocaleString()} entr{total === 1 ? "y" : "ies"}
+            {activeFilterCount > 0 && " matching these filters"}
+          </p>
+          {isFetching && !isLoading && (
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted" />
+          )}
+        </div>
+
+        {isLoading ? (
+          <div className="flex h-40 items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted" />
+          </div>
+        ) : entries.length === 0 ? (
+          <div className="p-8 text-center text-sm text-muted">
+            No entries match these filters. That reflects what the log holds; it
+            is not an assertion that nothing happened.
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-surface-hover/50 text-xs uppercase tracking-wider text-muted">
-                <tr>
-                  <th className="px-6 py-4 font-medium">Action</th>
-                  <th className="px-6 py-4 font-medium">Resource</th>
-                  <th className="px-6 py-4 font-medium">Actor</th>
-                  <th className="px-6 py-4 font-medium">IP Address</th>
-                  <th className="px-6 py-4 font-medium">Timestamp</th>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted">
+                  <th className="px-5 py-3 font-medium">When</th>
+                  <th className="px-5 py-3 font-medium">Actor</th>
+                  <th className="px-5 py-3 font-medium">Action</th>
+                  <th className="px-5 py-3 font-medium">Resource</th>
+                  <th className="px-5 py-3 font-medium">Source IP</th>
+                  <th className="px-5 py-3 font-medium">Detail</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/50">
-                {data?.items.map((log) => (
-                  <tr key={log.id} className="transition-colors hover:bg-surface-hover/50">
-                    <td className="px-6 py-4">
-                      <span className={cn("inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", getActionColor(log.action))}>
-                        {log.action.replace("_", " ")}
-                      </span>
+              <tbody>
+                {entries.map((entry) => (
+                  <tr
+                    key={entry.id}
+                    className="border-b border-border/60 align-top last:border-0 hover:bg-surface-hover"
+                  >
+                    <td className="whitespace-nowrap px-5 py-3 text-xs text-muted">
+                      {entry.created_at
+                        ? new Date(entry.created_at).toLocaleString()
+                        : "—"}
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col gap-1">
-                        <span className="font-semibold text-ink capitalize">{log.resource_type}</span>
-                        <span className="font-mono text-[10px] text-muted">{log.resource_id.substring(0, 8)}...</span>
-                      </div>
+                    <td className="px-5 py-3">
+                      {entry.actor_email ? (
+                        <>
+                          <div className="text-ink">
+                            {entry.actor_name || entry.actor_email}
+                          </div>
+                          {entry.actor_name && (
+                            <div className="text-[11px] text-muted">
+                              {entry.actor_email}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <span
+                          className="cursor-help border-b border-dotted border-muted/50 text-xs text-muted"
+                          title={entry.actor_note}
+                        >
+                          System
+                        </span>
+                      )}
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        {log.actor_user_id ? (
-                          <>
-                            <User className="h-4 w-4 text-primary" />
-                            <span className="font-medium text-ink">{log.actor_email}</span>
-                          </>
-                        ) : (
-                          <>
-                            <Server className="h-4 w-4 text-purple-500" />
-                            <span className="italic text-muted">System Action</span>
-                          </>
-                        )}
-                      </div>
+                    <td className="px-5 py-3">
+                      <code className="rounded bg-surface-hover px-1.5 py-0.5 text-[11px] text-ink">
+                        {entry.action}
+                      </code>
                     </td>
-                    <td className="px-6 py-4 font-mono text-xs text-muted">
-                      {log.ip_address || "-"}
+                    <td className="px-5 py-3 text-xs text-muted">
+                      {entry.resource_type}
+                      {entry.resource_id && (
+                        <div className="text-[10px] opacity-70">{entry.resource_id}</div>
+                      )}
                     </td>
-                    <td className="px-6 py-4 text-xs text-muted">
-                      {new Date(log.created_at).toLocaleString()}
+                    <td className="px-5 py-3 text-xs text-muted">
+                      {entry.ip_address || "—"}
+                    </td>
+                    <td className="max-w-xs px-5 py-3 text-[11px] text-muted">
+                      {Object.keys(entry.metadata || {}).length > 0
+                        ? Object.entries(entry.metadata)
+                            .slice(0, 4)
+                            .map(([key, value]) => `${key}=${String(value)}`)
+                            .join(" · ")
+                        : "—"}
                     </td>
                   </tr>
                 ))}
@@ -159,7 +403,35 @@ export default function AuditLogsPage() {
             </table>
           </div>
         )}
-      </div>
+
+        {pages > 1 && (
+          <div className="flex items-center justify-between border-t border-border px-5 py-3">
+            <p className="text-xs text-muted">
+              Page {page} of {pages}
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setSkip(Math.max(0, skip - PAGE_SIZE))}
+                disabled={skip === 0}
+                className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs text-ink hover:bg-surface-hover disabled:opacity-40"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+                Previous
+              </button>
+              <button
+                type="button"
+                onClick={() => setSkip(skip + PAGE_SIZE)}
+                disabled={page >= pages}
+                className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs text-ink hover:bg-surface-hover disabled:opacity-40"
+              >
+                Next
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

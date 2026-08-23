@@ -24,14 +24,14 @@ from app.models.remediation import RemediationTask, RiskAcceptance
 from app.models.vulnerability_intel import (
     Cve, CpeMatch, EpssScore, IntelSyncState, KevEntry,
 )
-from app.models.graph import AttackPath, GraphEdge
+from app.models.graph import AttackPath, ClaimStrength, GraphEdge
 from app.models.discovery import AttackSurfaceDomain, CloudResource, IdentityProfile
+from app.models.integration import IntegrationKind, IntegrationState, IntegrationStatus
+from app.models.firewall import FirewallIntegration, FirewallStatus, FirewallVendor
 from app.models.agent import (
     AgentActionProposal, AgentConversation, AgentMessage, GroundingStatus,
     MessageRole, ProposalStatus,
 )
-from app.models.notification import Notification
-from app.models.integration import TicketIntegration
 
 __all__ = [
     "Organization", "User", "Role", "Permission", "role_permissions", "user_roles",
@@ -43,9 +43,10 @@ __all__ = [
     "ScanJob", "ScanTarget", "DashboardSnapshot", "ExposureSnapshot", "ScanSchedule", "Incident",
     "BlockedIp", "CredentialProfile", "RemediationTask", "RiskAcceptance",
     "Cve", "CpeMatch", "EpssScore", "KevEntry", "IntelSyncState",
-    "AttackPath", "GraphEdge",
+    "AttackPath", "GraphEdge", "ClaimStrength",
+    "IntegrationState", "IntegrationKind", "IntegrationStatus",
+    "FirewallIntegration", "FirewallVendor", "FirewallStatus",
     "AttackSurfaceDomain", "CloudResource", "IdentityProfile",
     "AgentConversation", "AgentMessage", "AgentActionProposal",
     "MessageRole", "GroundingStatus", "ProposalStatus",
-    "Notification", "TicketIntegration",
 ]

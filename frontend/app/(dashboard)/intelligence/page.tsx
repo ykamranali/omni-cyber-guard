@@ -6,6 +6,7 @@ import {
   Lightbulb, ExternalLink, ShieldAlert,
   Search, Link as LinkIcon
 } from "lucide-react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 
 interface Evidence {
@@ -61,9 +62,13 @@ export default function CorrelatedIntelligencePage() {
           <h1 className="text-3xl font-bold tracking-tight text-ink">Correlated Intelligence</h1>
           <p className="mt-2 text-muted">Evidence-backed correlations and automated insights</p>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/10 px-4 py-2 text-primary shadow-[0_0_15px_rgba(var(--color-primary)/0.15)]">
+        {/* "Engine Active" was static markup with no state behind it. This
+            reports what the last correlation run actually produced. */}
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-muted">
           <ShieldCheck className="h-5 w-5" />
-          <span className="text-sm font-semibold">Engine Active</span>
+          <span className="text-sm">
+            {insights.length} correlation{insights.length === 1 ? "" : "s"} from your data
+          </span>
         </div>
       </div>
 
@@ -72,10 +77,12 @@ export default function CorrelatedIntelligencePage() {
           <div className="mb-4 rounded-full bg-surface-hover p-6">
             <BrainCircuit className="h-12 w-12 text-muted/30" />
           </div>
-          <h3 className="text-lg font-medium text-ink">No Correlated Insights</h3>
+          <h3 className="text-lg font-medium text-ink">Nothing to correlate</h3>
           <p className="mt-2 max-w-md text-sm text-muted">
-            The correlation engine hasn&apos;t found any evidence-backed insights based on your current posture.
-            This is a good thing! Ensure your network scanners and integrations are running.
+            The engine found no evidence-backed correlations in the data it
+            holds. That is not the same as a clean posture — if you have not
+            completed a scan, there is nothing here to correlate in the first
+            place.
           </p>
         </div>
       ) : (
@@ -178,9 +185,28 @@ export default function CorrelatedIntelligencePage() {
                 </div>
                 
                 <div className="flex-shrink-0">
-                  <button className="flex items-center gap-2 rounded-lg bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20">
-                    Investigate <ExternalLink className="h-4 w-4" />
-                  </button>
+                  {/* Had no handler. Every insight carries the exact finding
+                      ids it was derived from, so "investigate" opens those
+                      rather than being a word on a button. */}
+                  {insight.evidence.finding_ids?.length ? (
+                    <Link
+                      href={`/vulnerabilities?finding=${insight.evidence.finding_ids[0]}`}
+                      className="flex items-center gap-2 rounded-lg bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+                    >
+                      Investigate <ExternalLink className="h-4 w-4" />
+                    </Link>
+                  ) : insight.asset_ip ? (
+                    <Link
+                      href={`/assets?search=${encodeURIComponent(insight.asset_ip)}`}
+                      className="flex items-center gap-2 rounded-lg bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+                    >
+                      Open asset <ExternalLink className="h-4 w-4" />
+                    </Link>
+                  ) : (
+                    <span className="block max-w-[9rem] text-right text-xs text-muted">
+                      No record referenced
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

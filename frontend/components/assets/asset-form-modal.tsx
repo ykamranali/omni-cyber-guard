@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -17,20 +17,43 @@ export interface AssetFormValues {
   department: string;
 }
 
+const BLANK: AssetFormValues = {
+  hostname: "", ip_address: "", asset_type: "server", operating_system: "",
+  vendor: "", site: "", department: "",
+};
+
+/**
+ * Create *and* edit.
+ *
+ * Only `criticality` was ever editable, through a select in the drawer. An
+ * asset's hostname, address, type, operating system, vendor, site and
+ * department could be entered once and never corrected — so a typo at creation
+ * time, or a machine that was renamed, was permanent.
+ */
 export function AssetFormModal({
   open,
   onClose,
   onSubmit,
   submitting,
+  initialValues,
+  error,
 }: {
   open: boolean;
   onClose: () => void;
   onSubmit: (values: AssetFormValues) => void;
   submitting: boolean;
+  /** Present when editing; absent when creating. */
+  initialValues?: AssetFormValues | null;
+  error?: string | null;
 }) {
-  const [values, setValues] = useState<AssetFormValues>({
-    hostname: "", ip_address: "", asset_type: "server", operating_system: "", vendor: "", site: "", department: "",
-  });
+  const editing = Boolean(initialValues);
+  const [values, setValues] = useState<AssetFormValues>(initialValues ?? BLANK);
+
+  // Re-seed whenever the modal is opened for a different asset, otherwise the
+  // form keeps whatever was typed for the previous one.
+  useEffect(() => {
+    if (open) setValues(initialValues ?? BLANK);
+  }, [open, initialValues]);
 
   function update<K extends keyof AssetFormValues>(key: K, value: AssetFormValues[K]) {
     setValues((v) => ({ ...v, [key]: value }));
@@ -42,7 +65,7 @@ export function AssetFormModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Add Asset">
+    <Modal open={open} onClose={onClose} title={editing ? "Edit Asset" : "Add Asset"}>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
           <label className="mb-1 block text-xs text-muted">Hostname *</label>
@@ -87,9 +110,17 @@ export function AssetFormModal({
           </div>
         </div>
 
+        {error && (
+          <p className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-400">
+            {error}
+          </p>
+        )}
+
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={submitting}>{submitting ? "Saving…" : "Save Asset"}</Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? "Saving…" : editing ? "Save Changes" : "Add Asset"}
+          </Button>
         </div>
       </form>
     </Modal>

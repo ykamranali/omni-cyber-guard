@@ -8,6 +8,7 @@ from app.api.v1.endpoints import (
     compliance,
     dashboard,
     findings,
+    firewall,
     organizations,
     reports,
     scans,
@@ -29,8 +30,6 @@ from app.api.v1.endpoints import (
     attack_surface,
     cloud,
     identity,
-    notifications,
-    search,
 )
 
 api_router = APIRouter()
@@ -53,6 +52,7 @@ api_router.include_router(reports.router)
 api_router.include_router(system.router)
 api_router.include_router(agent.router)
 api_router.include_router(incidents.router)
+api_router.include_router(firewall.router)
 api_router.include_router(infrastructure.router)
 api_router.include_router(intelligence.router)
 api_router.include_router(vulnerability_intel.router)
@@ -62,5 +62,3 @@ api_router.include_router(attack_paths.router, prefix="/attack-paths", tags=["at
 api_router.include_router(attack_surface.router, prefix="/attack-surface", tags=["attack-surface"])
 api_router.include_router(cloud.router, prefix="/cloud", tags=["cloud"])
 api_router.include_router(identity.router, prefix="/identity", tags=["identity"])
-api_router.include_router(search.router, prefix="/search", tags=["search"])
-api_router.include_router(notifications.router, prefix="/notifications", tags=["notifications"])

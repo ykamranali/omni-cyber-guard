@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { useAuthStore } from "@/store/auth";
 import { WebSocketProvider } from "@/components/providers/websocket-provider";
+import { BrandingProvider } from "@/components/providers/branding-provider";
 
 export default function DashboardShellLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -24,11 +25,13 @@ export default function DashboardShellLayout({ children }: { children: React.Rea
   }
 
   return (
-    <WebSocketProvider>
-      <div className="flex min-h-screen bg-background">
-        <Sidebar />
-        <div className="flex flex-1 flex-col">{children}</div>
-      </div>
-    </WebSocketProvider>
+    <BrandingProvider>
+      <WebSocketProvider>
+        <div className="flex min-h-screen bg-background">
+          <Sidebar />
+          <div className="flex flex-1 flex-col">{children}</div>
+        </div>
+      </WebSocketProvider>
+    </BrandingProvider>
   );
 }

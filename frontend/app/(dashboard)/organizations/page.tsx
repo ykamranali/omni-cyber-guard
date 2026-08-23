@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Building2 } from "lucide-react";
+import { Plus, Building2, Pencil, Power, PowerOff, Trash2 } from "lucide-react";
 
 import { Topbar } from "@/components/layout/topbar";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { OrgFormModal, OrgFormValues } from "@/components/organizations/org-form-modal";
 import { api, ApiError } from "@/lib/api";
+import { useBranding } from "@/components/providers/branding-provider";
 import { useAuthStore } from "@/store/auth";
 
 interface OrganizationOut {
@@ -26,6 +27,7 @@ interface OrganizationOut {
 }
 
 export default function OrganizationsPage() {
+  const { refresh: refreshBranding } = useBranding();
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const [modalOpen, setModalOpen] = useState(false);
@@ -55,13 +57,54 @@ export default function OrganizationsPage() {
     }
   }, [currentOrg]);
 
+  // Both branding editors push the change into the running UI. Saving used to
+  // persist correctly and change nothing on screen.
   const updateBranding = useMutation({
     mutationFn: () => api.patch<OrganizationOut>("/organizations/current/branding", branding),
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["org-current"] });
+      await refreshBranding();
       setBrandingSaved(true);
       setTimeout(() => setBrandingSaved(false), 2500);
     },
+    onError: (err) =>
+      setError(err instanceof ApiError ? err.message : "Branding could not be saved."),
+  });
+
+  const renameOrg = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      api.patch<OrganizationOut>(`/organizations/${id}`, { name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["organizations"] });
+      setError(null);
+    },
+    onError: (err) =>
+      setError(err instanceof ApiError ? err.message : "The organization could not be renamed."),
+  });
+
+  const setOrgActive = useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      api.patch<OrganizationOut>(`/organizations/${id}`, { is_active: active }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["organizations"] });
+      setError(null);
+    },
+    onError: (err) =>
+      setError(
+        err instanceof ApiError ? err.message : "The organization could not be updated.",
+      ),
+  });
+
+  const deleteOrg = useMutation({
+    mutationFn: (id: string) => api.delete(`/organizations/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["organizations"] });
+      setError(null);
+    },
+    onError: (err) =>
+      setError(
+        err instanceof ApiError ? err.message : "The organization could not be deleted.",
+      ),
   });
 
   const createOrg = useMutation({
@@ -146,9 +189,61 @@ export default function OrganizationsPage() {
                         <p className="text-xs text-muted">{org.slug} · {org.license_seats} seats · {org.subscription_plan}</p>
                       </div>
                     </div>
-                    <span className={`text-xs ${org.is_active ? "text-low" : "text-muted"}`}>
-                      {org.is_active ? "Active" : "Inactive"}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs ${org.is_active ? "text-low" : "text-muted"}`}>
+                        {org.is_active ? "Active" : "Inactive"}
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const name = prompt("Organization name", org.name);
+                          if (name && name.trim() && name.trim() !== org.name) {
+                            renameOrg.mutate({ id: org.id, name: name.trim() });
+                          }
+                        }}
+                        className="rounded-md p-1.5 text-muted hover:bg-primary/10 hover:text-primary"
+                        title={`Rename ${org.name}`}
+                      >
+                        <Pencil size={14} />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOrgActive.mutate({ id: org.id, active: !org.is_active })
+                        }
+                        disabled={setOrgActive.isPending}
+                        className="rounded-md p-1.5 text-muted hover:bg-surface-hover hover:text-ink disabled:opacity-40"
+                        title={
+                          org.is_active
+                            ? "Deactivate — reversible, keeps all data"
+                            : "Reactivate"
+                        }
+                      >
+                        {org.is_active ? <PowerOff size={14} /> : <Power size={14} />}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Deliberately a typed confirmation. Deleting an
+                          // organization cascades to its assets, findings,
+                          // scans, credentials and audit trail, and there is no
+                          // undo — deactivation is the reversible option.
+                          const typed = prompt(
+                            `Permanently delete "${org.name}"?\n\nThis removes every asset, finding, scan, credential and audit record belonging to it. There is no undo — deactivate instead if you only want to suspend access.\n\nType the organization name to confirm:`,
+                          );
+                          if (typed === org.name) deleteOrg.mutate(org.id);
+                          else if (typed !== null) setError("The name did not match. Nothing was deleted.");
+                        }}
+                        disabled={deleteOrg.isPending}
+                        className="rounded-md p-1.5 text-muted hover:bg-critical/10 hover:text-critical disabled:opacity-40"
+                        title={`Delete ${org.name}`}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

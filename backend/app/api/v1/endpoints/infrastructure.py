@@ -35,6 +35,9 @@ ALLOWED_STATUSES = ("recommended", "enforced", "expired")
 class BlockIPRequest(BaseModel):
     ip: str
     reason: str = "Manual block"
+    #: Push the address to a connected firewall as well as recording it. The
+    #: entry is only marked enforced if the firewall accepts it.
+    enforce: bool = False
 
     @field_validator("ip")
     @classmethod
@@ -120,16 +123,45 @@ def block_ip(
         created_by_user_id=current_user.id,
         ip_address=payload.ip,
         reason=payload.reason,
+        # Always starts as a recorded decision. It becomes "enforced" only if a
+        # firewall accepts it below — never because the request asked for it.
         status="recommended",
     )
     db.add(entry)
-    db.commit()
-    db.refresh(entry)
+    db.flush()
 
     log_action(
         db, "block_ip", "blocked_ip", current_user.organization_id, current_user.id,
         str(entry.id), metadata={"ip": entry.ip_address, "reason": entry.reason},
     )
+
+    if payload.enforce:
+        from app.services.firewall_enforcement import (
+            EnforcementError, active_integration, enforce as push_block,
+        )
+
+        integration = active_integration(db, current_user.organization_id)
+        if integration is None:
+            db.commit()
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"{entry.ip_address} has been recorded, but no connected "
+                    f"firewall is available to enforce it. Connect one under "
+                    f"Firewall integrations, or apply the rule yourself."
+                ),
+            )
+        try:
+            push_block(
+                db, entry=entry, integration=integration,
+                actor_user_id=current_user.id,
+            )
+        except EnforcementError as exc:
+            db.commit()
+            raise HTTPException(status_code=502, detail=str(exc))
+
+    db.commit()
+    db.refresh(entry)
     return entry
 
 

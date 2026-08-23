@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, Plus, Download, Upload, Trash2, Radar, ArrowRight, Folder, ChevronDown, ChevronRight } from "lucide-react";
+import { Search, Plus, Download, Upload, Trash2, Pencil, Radar, ArrowRight, Folder, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
 
 import { Topbar } from "@/components/layout/topbar";
 import { Card } from "@/components/ui/card";
@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AssetFormModal, AssetFormValues } from "@/components/assets/asset-form-modal";
 import { AssetDrawer } from "@/components/assets/asset-drawer";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 
 interface AssetOut {
@@ -34,6 +34,9 @@ export default function AssetsPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingAsset, setEditingAsset] = useState<AssetOut | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [scanIdFilter, setScanIdFilter] = useState<string>("all");
@@ -48,7 +51,6 @@ export default function AssetsPage() {
   const { data: scans } = useQuery({
     queryKey: ["scans"],
     queryFn: () => api.get<any[]>("/scans"),
-    refetchInterval: 5000,
   });
 
   const { data: assets, isLoading, isError } = useQuery({
@@ -60,7 +62,6 @@ export default function AssetsPage() {
       const queryStr = params.toString();
       return api.get<AssetOut[]>(`/assets${queryStr ? `?${queryStr}` : ""}`);
     },
-    refetchInterval: 5000,
   });
 
   // Group assets by scan_job_id
@@ -105,12 +106,46 @@ export default function AssetsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["assets"] });
       setModalOpen(false);
+      setFormError(null);
     },
+    onError: (err) =>
+      setFormError(err instanceof ApiError ? err.message : "The asset could not be created."),
   });
 
+  const updateAsset = useMutation({
+    mutationFn: ({ id, values }: { id: string; values: AssetFormValues }) =>
+      api.patch(`/assets/${id}`, {
+        hostname: values.hostname,
+        ip_address: values.ip_address || null,
+        asset_type: values.asset_type,
+        operating_system: values.operating_system || null,
+        vendor: values.vendor || null,
+        site: values.site || null,
+        department: values.department || null,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["assets"] });
+      setModalOpen(false);
+      setEditingAsset(null);
+      setFormError(null);
+    },
+    onError: (err) =>
+      setFormError(err instanceof ApiError ? err.message : "The asset could not be saved."),
+  });
+
+  // Every delete previously had no onError at all, so a refusal — a role
+  // without manage_assets, a constraint, anything — produced complete silence
+  // and looked like the button did nothing.
   const deleteAsset = useMutation({
     mutationFn: (id: string) => api.delete(`/assets/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["assets"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["assets"] });
+      setActionError(null);
+    },
+    onError: (err) =>
+      setActionError(
+        err instanceof ApiError ? err.message : "The asset could not be deleted.",
+      ),
   });
 
   const deleteBulkAssets = useMutation({
@@ -118,7 +153,12 @@ export default function AssetsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["assets"] });
       setSelectedAssetIds(new Set());
+      setActionError(null);
     },
+    onError: (err) =>
+      setActionError(
+        err instanceof ApiError ? err.message : "The assets could not be deleted.",
+      ),
   });
 
   const toggleAssetSelection = (id: string) => {
@@ -167,6 +207,19 @@ export default function AssetsPage() {
     <>
       <Topbar title="Asset Inventory" />
       <main className="flex-1 space-y-4 overflow-y-auto p-6">
+        {actionError && (
+          <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-3 text-sm text-red-400">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span className="flex-1">{actionError}</span>
+            <button
+              type="button"
+              onClick={() => setActionError(null)}
+              className="text-xs underline"
+            >
+              dismiss
+            </button>
+          </div>
+        )}
         <Link href="/scans">
           <Card className="flex items-center justify-between transition-colors hover:bg-surface-hover/60">
             <div className="flex items-center gap-3">
@@ -335,18 +388,37 @@ export default function AssetsPage() {
                                   </span>
                                 </td>
                                 <td className="px-4 py-3 text-right">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (confirm(`Are you sure you want to delete ${asset.hostname}?`)) {
-                                        deleteAsset.mutate(asset.id);
-                                      }
-                                    }}
-                                    className="rounded-md p-1.5 text-muted hover:bg-critical/10 hover:text-critical"
-                                    title="Delete Asset"
-                                  >
-                                    <Trash2 size={15} />
-                                  </button>
+                                  <div className="flex items-center justify-end gap-1">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingAsset(asset);
+                                        setFormError(null);
+                                        setModalOpen(true);
+                                      }}
+                                      className="rounded-md p-1.5 text-muted hover:bg-primary/10 hover:text-primary"
+                                      title={`Edit ${asset.hostname}`}
+                                    >
+                                      <Pencil size={15} />
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (
+                                          confirm(
+                                            `Delete ${asset.hostname}? Its findings, services and scan history go with it. This cannot be undone.`,
+                                          )
+                                        ) {
+                                          deleteAsset.mutate(asset.id);
+                                        }
+                                      }}
+                                      disabled={deleteAsset.isPending}
+                                      className="rounded-md p-1.5 text-muted hover:bg-critical/10 hover:text-critical disabled:opacity-40"
+                                      title={`Delete ${asset.hostname}`}
+                                    >
+                                      <Trash2 size={15} />
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             ))}
@@ -364,9 +436,31 @@ export default function AssetsPage() {
 
       <AssetFormModal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        submitting={createAsset.isPending}
-        onSubmit={(values) => createAsset.mutate(values)}
+        onClose={() => {
+          setModalOpen(false);
+          setEditingAsset(null);
+          setFormError(null);
+        }}
+        submitting={createAsset.isPending || updateAsset.isPending}
+        error={formError}
+        initialValues={
+          editingAsset
+            ? {
+                hostname: editingAsset.hostname,
+                ip_address: editingAsset.ip_address ?? "",
+                asset_type: editingAsset.asset_type,
+                operating_system: editingAsset.operating_system ?? "",
+                vendor: (editingAsset as { vendor?: string | null }).vendor ?? "",
+                site: editingAsset.site ?? "",
+                department: (editingAsset as { department?: string | null }).department ?? "",
+              }
+            : null
+        }
+        onSubmit={(values) =>
+          editingAsset
+            ? updateAsset.mutate({ id: editingAsset.id, values })
+            : createAsset.mutate(values)
+        }
       />
 
       <AssetDrawer 

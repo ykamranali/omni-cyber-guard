@@ -22,6 +22,12 @@ class ScanJobCreate(BaseModel):
     #: Credential profile for an authenticated assessment. Required by engines
     #: that declare the CREDENTIALED capability.
     credential_profile_id: uuid.UUID | None = None
+    #: The operator affirming, at launch, that they are authorized to assess
+    #: this target. Required, and deliberately not defaulted to True: a scan is
+    #: an active reach-out to hosts someone owns, and the specification
+    #: requires confirmation before launch rather than an implied consent
+    #: carried over from whenever the range was registered.
+    authorization_confirmed: bool = False
 
     @field_validator("target_cidr")
     @classmethod

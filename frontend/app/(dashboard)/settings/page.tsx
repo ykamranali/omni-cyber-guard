@@ -6,9 +6,11 @@ import { Save, CheckCircle2, Paintbrush, Bell, Shield, Loader2, Send, AlertTrian
 import { cn } from "@/lib/utils";
 import { Topbar } from "@/components/layout/topbar";
 import { api } from "@/lib/api";
+import { useBranding } from "@/components/providers/branding-provider";
 
 export default function SettingsPage() {
   const token = useAuthStore((s) => s.accessToken);
+  const { refresh: refreshBranding } = useBranding();
   const [activeTab, setActiveTab] = useState<"branding" | "notifications" | "security">("branding");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -20,6 +22,8 @@ export default function SettingsPage() {
     primary_color: "",
     secondary_color: "",
     footer_text: "",
+    logo_url: "",
+    favicon_url: "",
     slack_webhook_url: "",
     teams_webhook_url: "",
     sso_provider: "none",
@@ -34,6 +38,8 @@ export default function SettingsPage() {
           primary_color: data.primary_color || "#0EA5E9",
           secondary_color: data.secondary_color || "#7C3AED",
           footer_text: data.footer_text || "",
+          logo_url: data.logo_url || "",
+          favicon_url: data.favicon_url || "",
           slack_webhook_url: data.slack_webhook_url || "",
           teams_webhook_url: data.teams_webhook_url || "",
           sso_provider: data.sso_provider || "none",
@@ -57,8 +63,18 @@ export default function SettingsPage() {
         await api.patch("/organizations/current/branding", {
           primary_color: formData.primary_color,
           secondary_color: formData.secondary_color,
-          footer_text: formData.footer_text
+          footer_text: formData.footer_text,
+          logo_url: formData.logo_url || null,
+          favicon_url: formData.favicon_url || null,
         });
+        // Push the change into the running UI immediately.
+        //
+        // Saving branding used to persist correctly, report success, and leave
+        // the interface byte-for-byte identical — including after a full
+        // reload — because nothing anywhere read the saved values back. This
+        // refetches them and applies them to the CSS variables the whole
+        // application is built on.
+        await refreshBranding();
       } else {
         await api.patch("/organizations/current/settings", {
           slack_webhook_url: formData.slack_webhook_url || null,
@@ -201,6 +217,76 @@ export default function SettingsPage() {
                             placeholder="Powered by Omni Digital Solution"
                             className="w-full rounded-lg border border-border/50 bg-background px-3 py-2.5 text-sm text-ink focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50"
                           />
+                          <p className="text-xs text-muted">Shown at the foot of the navigation.</p>
+                        </div>
+
+                        <div className="grid gap-6 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <label className="text-xs font-bold uppercase tracking-widest text-muted">Logo URL</label>
+                            <input
+                              type="url"
+                              value={formData.logo_url}
+                              onChange={e => setFormData({ ...formData, logo_url: e.target.value })}
+                              placeholder="https://example.com/logo.svg"
+                              className="w-full rounded-lg border border-border/50 bg-background px-3 py-2.5 text-sm text-ink focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50"
+                            />
+                            <p className="text-xs text-muted">
+                              Replaces the shield mark in the navigation. Must be a URL this
+                              browser can load; there is no upload here yet.
+                            </p>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-xs font-bold uppercase tracking-widest text-muted">Favicon URL</label>
+                            <input
+                              type="url"
+                              value={formData.favicon_url}
+                              onChange={e => setFormData({ ...formData, favicon_url: e.target.value })}
+                              placeholder="https://example.com/favicon.ico"
+                              className="w-full rounded-lg border border-border/50 bg-background px-3 py-2.5 text-sm text-ink focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50"
+                            />
+                            <p className="text-xs text-muted">Sets the browser tab icon.</p>
+                          </div>
+                        </div>
+
+                        {/* A live preview, so the effect of a colour is visible
+                            before it is saved rather than after a reload. */}
+                        <div className="rounded-xl border border-border/50 bg-background p-4">
+                          <p className="mb-3 text-xs font-bold uppercase tracking-widest text-muted">
+                            Preview
+                          </p>
+                          <div className="flex flex-wrap items-center gap-3">
+                            <span
+                              className="rounded-lg px-4 py-2 text-sm font-medium"
+                              style={{
+                                backgroundColor: formData.primary_color,
+                                color: "#fff",
+                              }}
+                            >
+                              Primary action
+                            </span>
+                            <span
+                              className="rounded-lg px-4 py-2 text-sm font-medium"
+                              style={{
+                                backgroundColor: formData.secondary_color,
+                                color: "#fff",
+                              }}
+                            >
+                              Secondary
+                            </span>
+                            <span
+                              className="rounded-lg border px-4 py-2 text-sm"
+                              style={{
+                                borderColor: formData.primary_color,
+                                color: formData.primary_color,
+                              }}
+                            >
+                              Outlined
+                            </span>
+                          </div>
+                          <p className="mt-3 text-xs text-muted">
+                            Saving applies these across the whole interface immediately —
+                            no reload needed.
+                          </p>
                         </div>
                       </div>
                     </>

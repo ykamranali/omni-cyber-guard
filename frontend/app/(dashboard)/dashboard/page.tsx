@@ -20,6 +20,7 @@ import { RiskTrendChart } from "@/components/dashboard/risk-trend-chart";
 import { ComplianceRings } from "@/components/dashboard/compliance-rings";
 import { SystemStatusWidget } from "@/components/dashboard/system-status";
 import { ActivityTicker } from "@/components/dashboard/activity-ticker";
+import { WorkerStatusBanner } from "@/components/system/worker-status-banner";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 
@@ -43,53 +44,57 @@ interface SystemStatusOut { overall_status: string; components: ComponentStatus[
 
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
-  const [networkInfo, setNetworkInfo] = useState({ local: "Detecting...", public: "Establishing connection..." });
+  const [networkInfo, setNetworkInfo] = useState({
+    local: "Detecting…",
+    client: "Detecting…",
+  });
 
   useEffect(() => {
-    fetch("https://api.ipify.org?format=json")
-      .then(res => res.json())
-      .then(data => setNetworkInfo(prev => ({ ...prev, public: data.ip })))
-      .catch(() => setNetworkInfo(prev => ({ ...prev, public: "Encrypted / Unavailable" })));
-
-    api.get<{client_ip: string; server_local_ip: string}>("/system/network-info")
-      .then(data => setNetworkInfo(prev => ({ ...prev, local: data.server_local_ip })))
-      .catch(() => setNetworkInfo(prev => ({ ...prev, local: "Unknown" })));
+    // The public address previously came from a call to api.ipify.org made
+    // directly from the operator's browser — a security console reaching out
+    // to a third party on every page load, and reporting the *browser's* exit
+    // address as though it were the platform's. Both values now come from the
+    // platform's own API.
+    api
+      .get<{ client_ip: string; server_local_ip: string }>("/system/network-info")
+      .then((data) =>
+        setNetworkInfo({
+          local: data.server_local_ip || "Unknown",
+          client: data.client_ip || "Unknown",
+        }),
+      )
+      .catch(() => setNetworkInfo({ local: "Unavailable", client: "Unavailable" }));
   }, []);
 
   const { data: summary, isLoading, isError } = useQuery({
-    queryKey: ["dashboard-summary"],
+    queryKey: ["dashboard", "summary"],
     queryFn: () => api.get<DashboardSummary>("/dashboard/summary"),
-    refetchInterval: 5000,
   });
   const { data: trend } = useQuery({
-    queryKey: ["dashboard-trend"],
+    queryKey: ["dashboard", "trend"],
     queryFn: () => api.get<TrendPoint[]>("/dashboard/trend?days=7"),
     enabled: !!summary,
-    refetchInterval: 5000,
   });
   const { data: topRisky } = useQuery({
-    queryKey: ["top-risky-assets"],
+    queryKey: ["dashboard", "top-risky-assets"],
     queryFn: () => api.get<AssetOut[]>("/dashboard/top-risky-assets?limit=5"),
     enabled: !!summary,
-    refetchInterval: 5000,
   });
   const { data: geoAssets } = useQuery({
-    queryKey: ["geo-assets"],
+    queryKey: ["dashboard", "geo-assets"],
     queryFn: () => api.get<AssetOut[]>("/dashboard/geo-assets"),
     enabled: !!summary,
-    refetchInterval: 5000,
   });
   const { data: scans } = useQuery({
     queryKey: ["scans"],
     queryFn: () => api.get<ScanJobOut[]>("/scans"),
     enabled: !!summary,
-    refetchInterval: 5000,
   });
   const { data: systemStatus } = useQuery({
-    queryKey: ["system-status"],
+    queryKey: ["system", "status"],
     queryFn: () => api.get<SystemStatusOut>("/system/status"),
     enabled: !!summary,
-    refetchInterval: 5000,
+    refetchInterval: 30_000,
   });
 
   const severityData = summary
@@ -114,7 +119,8 @@ export default function DashboardPage() {
         )}
 
         {summary && (
-          <div className="relative z-10 space-y-8 max-w-[1600px] mx-auto">
+          <div className="relative z-10 mx-auto max-w-[1600px] space-y-8">
+            <WorkerStatusBanner />
             <div className="premium-card bg-gradient-to-r from-surface to-surface-hover p-6 flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="premium-card-inner"></div>
               <div className="flex items-center gap-5 relative z-10">
@@ -124,14 +130,32 @@ export default function DashboardPage() {
                 <div>
                   <h3 className="text-lg font-semibold text-ink tracking-wide">Live Network Link</h3>
                   <div className="flex flex-wrap gap-x-6 gap-y-1 mt-1 text-xs font-medium uppercase tracking-widest text-muted">
-                    <p>LOCAL: <span className="font-mono text-ink/80">{networkInfo.local}</span></p>
-                    <p>PUBLIC: <span className="font-mono text-ink/80">{networkInfo.public}</span></p>
+                    <p>PLATFORM: <span className="font-mono text-ink/80">{networkInfo.local}</span></p>
+                    <p>YOUR SESSION: <span className="font-mono text-ink/80">{networkInfo.client}</span></p>
                   </div>
                 </div>
               </div>
-              <div className="relative z-10 flex items-center gap-2 px-4 py-1.5 border border-green-500/30 bg-green-500/10 rounded-full text-green-400 font-medium tracking-widest text-xs">
-                <span className="h-2 w-2 rounded-full bg-green-500 shadow-[0_0_8px_#22C55E] animate-pulse" /> 
-                SECURE UPLINK
+              {/* Reflects the platform's real component health rather than
+                  being a permanently green badge. */}
+              <div
+                className={`relative z-10 flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-medium tracking-widest ${
+                  systemStatus?.overall_status === "operational"
+                    ? "border-green-500/30 bg-green-500/10 text-green-400"
+                    : systemStatus?.overall_status === "degraded"
+                      ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
+                      : "border-red-500/30 bg-red-500/10 text-red-400"
+                }`}
+              >
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    systemStatus?.overall_status === "operational"
+                      ? "animate-pulse bg-green-500"
+                      : systemStatus?.overall_status === "degraded"
+                        ? "bg-amber-500"
+                        : "bg-red-500"
+                  }`}
+                />
+                {(systemStatus?.overall_status ?? "checking").toUpperCase()}
               </div>
             </div>
 

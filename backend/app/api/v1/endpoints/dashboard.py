@@ -11,6 +11,7 @@ from app.models.asset import Asset, AssetStatus
 from app.models.finding import Finding, Severity, FindingStatus
 from app.models.compliance import ComplianceFramework
 from app.models.dashboard_snapshot import DashboardSnapshot
+from app.models.scan_job import ScanJob, ScanStatus
 from app.models.user import User
 from app.schemas.asset import AssetOut
 from app.schemas.dashboard import DashboardSummary, SeverityCounts, TrendPoint
@@ -96,6 +97,18 @@ def dashboard_summary(
 
     record_snapshot_if_needed(db, org_id, security_score, round(risk_score, 1), open_findings)
 
+    # Coverage, so a zero finding count can be read correctly. Zero findings
+    # after ten scans and zero findings after no scans are entirely different
+    # statements, and the dashboard previously showed them identically.
+    completed_scans = db.query(func.count(ScanJob.id)).filter(
+        ScanJob.organization_id == org_id,
+        ScanJob.status == ScanStatus.COMPLETED,
+    ).scalar() or 0
+    last_scan = db.query(func.max(ScanJob.updated_at)).filter(
+        ScanJob.organization_id == org_id,
+        ScanJob.status == ScanStatus.COMPLETED,
+    ).scalar()
+
     return DashboardSummary(
         security_score=security_score,
         risk_score=round(risk_score, 1),
@@ -107,6 +120,8 @@ def dashboard_summary(
         remediation_progress_percent=round(remediation_progress, 1),
         open_findings=open_findings,
         remediated_findings_last_30_days=remediated_30d,
+        completed_scans=completed_scans,
+        last_scan_at=last_scan.isoformat() if last_scan else None,
     )
 
 

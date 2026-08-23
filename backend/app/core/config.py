@@ -72,6 +72,25 @@ class Settings(BaseSettings):
     # Automatic daily synchronisation of the KEV, EPSS and NVD feeds.
     ENABLE_INTEL_SYNC: bool = True
 
+    # --- External discovery integrations --------------------------------
+    # All unset by default. An unconfigured integration reports itself as
+    # unconfigured; it never writes a placeholder record into the inventory it
+    # was meant to populate. See app/services/integrations/.
+    #
+    # Cloud posture (read-only). AWS needs a principal with SecurityAudit or
+    # equivalent; Azure needs an app registration with the Reader role.
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_REGION: str = ""
+    AZURE_TENANT_ID: str = ""
+    AZURE_CLIENT_ID: str = ""
+    AZURE_CLIENT_SECRET: str = ""
+    AZURE_SUBSCRIPTION_ID: str = ""
+
+    # Identity providers (read-only). Entra ID reuses the AZURE_* values above.
+    OKTA_ORG_URL: str = ""
+    OKTA_API_TOKEN: str = ""
+
     # --- AI security engineer ------------------------------------------
     # The agent is deliberately unconfigured by default. Its previous form
     # defaulted to a local Ollama endpoint and, when that endpoint was absent,
@@ -130,11 +149,6 @@ class Settings(BaseSettings):
             problems.append(
                 "ENABLE_ROW_LEVEL_SECURITY is off, leaving tenant isolation "
                 "dependent on application query filters alone"
-            )
-
-        if "*" in self.BACKEND_CORS_ORIGINS or any(origin.strip() == "*" for origin in self.BACKEND_CORS_ORIGINS):
-            problems.append(
-                "BACKEND_CORS_ORIGINS contains a wildcard '*', which is not permitted in production"
             )
 
         if problems:

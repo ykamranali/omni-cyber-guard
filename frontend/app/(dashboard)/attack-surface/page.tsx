@@ -1,211 +1,270 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { useAuthStore } from "@/store/auth";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Loader2, Globe, Shield, AlertTriangle, Radar, Plus } from "lucide-react";
-import { format } from "date-fns";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  AlertTriangle, Globe, Loader2, Plus, RadioTower, ShieldCheck, Trash2,
+} from "lucide-react";
+import { api, ApiError } from "@/lib/api";
+
+/**
+ * External attack surface.
+ *
+ * The workflow changed, deliberately. Probing a domain resolves it and opens a
+ * TLS connection to a host somebody else owns, so the domain has to be
+ * registered as authorized scope first — the row is the authorization. The
+ * previous page took any string in a text box and dispatched a live probe at
+ * it, with no permission check and no scope check anywhere in the path.
+ *
+ * The certificate expiry column is the reason this page earns its place: it is
+ * read from the live endpoint, not from a database someone typed into.
+ */
+
+interface Domain {
+  id: string;
+  domain_name: string;
+  ip_addresses: string[];
+  registrar: string;
+  registrar_note: string;
+  is_active: boolean;
+  cert_issuer: string;
+  cert_valid_from: string | null;
+  cert_valid_to: string | null;
+  cert_expires_in_days: number | null;
+  authorized_at: string | null;
+  last_checked_at: string | null;
+  probe_status: string;
+  probe_message: string;
+}
+
+interface AttackSurfaceResponse {
+  domains: Domain[];
+  empty_state_note: string;
+}
+
+function ExpiryCell({ days }: { days: number | null }) {
+  if (days === null) {
+    return <span className="text-xs text-muted">Not read</span>;
+  }
+  if (days < 0) {
+    return (
+      <span className="text-xs font-medium text-red-400">
+        Expired {Math.abs(days)}d ago
+      </span>
+    );
+  }
+  const tone =
+    days <= 14 ? "text-red-400" : days <= 30 ? "text-amber-400" : "text-emerald-400";
+  return <span className={`text-xs font-medium ${tone}`}>{days}d remaining</span>;
+}
 
 export default function AttackSurfacePage() {
-  const [domains, setDomains] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isDiscovering, setIsDiscovering] = useState(false);
+  const queryClient = useQueryClient();
+  const [domain, setDomain] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [formError, setFormError] = useState("");
 
-  const runDiscovery = async (domain: string) => {
-    setIsDiscovering(true);
-    try {
-      const token = useAuthStore.getState().accessToken;
-      await fetch("/api/v1/attack-surface/scan", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ domain }),
-      });
-      alert(`Discovery started for ${domain}. It may take a minute to appear.`);
-      setTimeout(fetchDomains, 3000);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to start discovery.");
-    } finally {
-      setIsDiscovering(false);
-    }
-  };
+  const { data, isLoading, error } = useQuery<AttackSurfaceResponse>({
+    queryKey: ["attack-surface"],
+    queryFn: () => api.get<AttackSurfaceResponse>("/attack-surface/"),
+  });
 
-  const fetchDomains = useCallback(async () => {
-    try {
-      const token = useAuthStore.getState().accessToken;
-      if (!token) return;
+  const register = useMutation({
+    mutationFn: () =>
+      api.post("/attack-surface/domains", {
+        domain: domain.trim().toLowerCase(),
+        authorization_confirmed: confirmed,
+      }),
+    onSuccess: () => {
+      setDomain("");
+      setConfirmed(false);
+      setFormError("");
+      void queryClient.invalidateQueries({ queryKey: ["attack-surface"] });
+    },
+    onError: (caught) =>
+      setFormError(
+        caught instanceof ApiError ? caught.message : "The domain could not be registered.",
+      ),
+  });
 
-      const res = await fetch("/api/v1/attack-surface/", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+  const probe = useMutation({
+    mutationFn: (id: string) => api.post(`/attack-surface/domains/${id}/probe`, {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["attack-surface"] }),
+  });
 
-      if (!res.ok) throw new Error("Failed to fetch attack surface data");
-      const data = await res.json();
-      setDomains(data);
-    } catch (err: any) {
-      console.error(err);
-      setError("Could not load external attack surface data");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const remove = useMutation({
+    mutationFn: (id: string) => api.delete(`/attack-surface/domains/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["attack-surface"] }),
+  });
 
-  useEffect(() => {
-    fetchDomains();
-  }, [fetchDomains]);
-
-  if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex h-64 items-center justify-center text-red-500">
-        <AlertTriangle className="h-6 w-6 mr-2" />
-        {error}
-      </div>
-    );
-  }
-
-  const expiringCerts = domains.filter((d) => {
-    if (!d.cert_valid_to) return false;
-    const daysUntilExpiry = (new Date(d.cert_valid_to).getTime() - new Date().getTime()) / (1000 * 3600 * 24);
-    return daysUntilExpiry < 30;
-  }).length;
+  const domains = data?.domains ?? [];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">External Attack Surface</h2>
-          <p className="text-muted-foreground">
-            Discover and monitor your internet-facing assets, domains, and certificates.
-          </p>
+    <div className="space-y-6 p-6">
+      <div>
+        <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight text-ink">
+          <Globe className="h-8 w-8 text-primary" />
+          External Attack Surface
+        </h1>
+        <p className="mt-2 text-muted">
+          DNS resolution and live TLS certificate details for the domains you
+          have declared in scope.
+        </p>
+      </div>
+
+      <section className="rounded-xl border border-border bg-surface p-5">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
+          <ShieldCheck className="h-4 w-4 text-primary" />
+          Register a domain as authorized scope
+        </h2>
+        <p className="mt-1 text-xs text-muted">
+          Probing resolves the name and connects to it over TLS. Register only
+          domains you are authorized to assess — this platform will not probe a
+          host you have not declared.
+        </p>
+
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex-1">
+            <label className="mb-1 block text-xs font-medium text-muted" htmlFor="domain">
+              Domain
+            </label>
+            <input
+              id="domain"
+              value={domain}
+              onChange={(event) => setDomain(event.target.value)}
+              placeholder="example.com"
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-ink placeholder:text-muted focus:border-primary focus:outline-none"
+            />
+          </div>
+          <button
+            type="button"
+            disabled={!domain.trim() || !confirmed || register.isPending}
+            onClick={() => register.mutate()}
+            className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-40"
+          >
+            {register.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+            Register
+          </button>
         </div>
-        <form onSubmit={(e) => {
-          e.preventDefault();
-          const target = (e.target as any).domain.value;
-          if (target) {
-            runDiscovery(target);
-            (e.target as any).reset();
-          }
-        }} className="flex items-center gap-2">
-          <Input name="domain" placeholder="example.com" className="w-64" required />
-          <Button type="submit" disabled={isDiscovering}>
-            {isDiscovering ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Radar className="h-4 w-4 mr-2" />}
-            Run Discovery
-          </Button>
-        </form>
-      </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Domains</CardTitle>
-            <Globe className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{domains.length}</div>
-            <p className="text-xs text-muted-foreground">Discovered via passive reconnaissance</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active IPs</CardTitle>
-            <Globe className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {new Set(domains.flatMap((d) => d.ip_addresses)).size}
-            </div>
-            <p className="text-xs text-muted-foreground">Resolving IP addresses</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Expiring Certificates</CardTitle>
-            <Shield className="h-4 w-4 text-red-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-500">{expiringCerts}</div>
-            <p className="text-xs text-muted-foreground">Expiring within 30 days</p>
-          </CardContent>
-        </Card>
-      </div>
+        <label className="mt-3 flex items-start gap-2 text-xs text-ink/90">
+          <input
+            type="checkbox"
+            checked={confirmed}
+            onChange={(event) => setConfirmed(event.target.checked)}
+            className="mt-0.5 h-3.5 w-3.5 accent-[rgb(var(--color-primary))]"
+          />
+          I confirm I am authorized to assess this domain.
+        </label>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Discovered Domains</CardTitle>
-          <CardDescription>
-            A list of all publicly discoverable domains associated with your organization.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
+        {formError && <p className="mt-2 text-xs text-red-400">{formError}</p>}
+      </section>
+
+      {error && (
+        <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-400">
+          <AlertTriangle className="h-5 w-5" />
+          {error instanceof ApiError ? error.message : "The attack surface could not be loaded."}
+        </div>
+      )}
+
+      <section className="rounded-xl border border-border bg-surface">
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="text-sm font-semibold text-ink">Registered domains</h2>
+        </div>
+
+        {isLoading ? (
+          <div className="flex h-40 items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted" />
+          </div>
+        ) : domains.length === 0 ? (
+          <div className="p-8 text-center text-sm text-muted">
+            {data?.empty_state_note || "No domains are registered."}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-muted/50 text-left">
-                  <th className="p-4 font-medium">Domain Name</th>
-                  <th className="p-4 font-medium">IP Addresses</th>
-                  <th className="p-4 font-medium">Registrar</th>
-                  <th className="p-4 font-medium">Status</th>
-                  <th className="p-4 font-medium">Cert Issuer</th>
-                  <th className="p-4 font-medium">Cert Expiry</th>
+                <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted">
+                  <th className="px-5 py-3 font-medium">Domain</th>
+                  <th className="px-5 py-3 font-medium">Addresses</th>
+                  <th className="px-5 py-3 font-medium">Certificate issuer</th>
+                  <th className="px-5 py-3 font-medium">Expiry</th>
+                  <th className="px-5 py-3 font-medium">Last probed</th>
+                  <th className="px-5 py-3 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {domains.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="p-4 text-center text-muted-foreground">
-                      No domains discovered yet.
+                {domains.map((record) => (
+                  <tr
+                    key={record.id}
+                    className="border-b border-border/60 last:border-0 hover:bg-surface-hover"
+                  >
+                    <td className="px-5 py-3">
+                      <div className="font-medium text-ink">{record.domain_name}</div>
+                      {record.probe_message && (
+                        <div className="mt-0.5 max-w-md text-[11px] text-muted">
+                          {record.probe_message}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-5 py-3 text-xs text-muted">
+                      {record.ip_addresses.length > 0
+                        ? record.ip_addresses.join(", ")
+                        : "—"}
+                    </td>
+                    <td className="px-5 py-3 text-xs text-muted">
+                      {record.cert_issuer || "—"}
+                    </td>
+                    <td className="px-5 py-3">
+                      <ExpiryCell days={record.cert_expires_in_days} />
+                    </td>
+                    <td className="px-5 py-3 text-xs text-muted">
+                      {/* Never probed is a different statement from probed and
+                          found nothing. */}
+                      {record.last_checked_at
+                        ? new Date(record.last_checked_at).toLocaleString()
+                        : "Never"}
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => probe.mutate(record.id)}
+                          disabled={probe.isPending}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs text-ink hover:bg-surface-hover disabled:opacity-40"
+                        >
+                          <RadioTower className="h-3.5 w-3.5" />
+                          Probe
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `Remove ${record.domain_name} from scope? This revokes authorization to probe it.`,
+                              )
+                            ) {
+                              remove.mutate(record.id);
+                            }
+                          }}
+                          className="rounded-lg border border-border p-1.5 text-muted hover:text-red-400"
+                          aria-label={`Remove ${record.domain_name}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                ) : (
-                  domains.map((domain) => {
-                    let certStatus = "valid";
-                    if (domain.cert_valid_to) {
-                      const daysUntilExpiry = (new Date(domain.cert_valid_to).getTime() - new Date().getTime()) / (1000 * 3600 * 24);
-                      if (daysUntilExpiry < 0) certStatus = "expired";
-                      else if (daysUntilExpiry < 30) certStatus = "expiring";
-                    }
-
-                    return (
-                      <tr key={domain.id} className="border-b last:border-0 hover:bg-muted/30">
-                        <td className="p-4 font-medium">{domain.domain_name}</td>
-                        <td className="p-4 text-muted-foreground">
-                          {domain.ip_addresses.join(", ") || "-"}
-                        </td>
-                        <td className="p-4 text-muted-foreground">{domain.registrar || "-"}</td>
-                        <td className="p-4">
-                          <Badge label={domain.is_active ? "active" : "inactive"} />
-                        </td>
-                        <td className="p-4 text-muted-foreground">{domain.cert_issuer || "-"}</td>
-                        <td className="p-4">
-                          {domain.cert_valid_to ? (
-                            <span className={certStatus === "expired" || certStatus === "expiring" ? "text-red-500 font-medium" : ""}>
-                              {format(new Date(domain.cert_valid_to), "PP")}
-                            </span>
-                          ) : (
-                            "-"
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
+                ))}
               </tbody>
             </table>
           </div>
-        </CardContent>
-      </Card>
+        )}
+      </section>
     </div>
   );
 }

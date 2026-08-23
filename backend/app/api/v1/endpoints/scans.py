@@ -20,6 +20,7 @@ from app.models.user import User
 from app.scanners.manager import ScannerManager
 from app.schemas.scan import ScanJobCreate, ScanJobOut
 from app.services.network_scanner import validate_authorized_target, ScanAuthorizationError
+from app.services.scan_authorization import AuthorizationError, assert_target_authorized
 from app.services.audit import log_action
 
 router = APIRouter(prefix="/scans", tags=["Network Scans"])
@@ -67,17 +68,50 @@ def create_scan(
     if scanner is None:
         raise HTTPException(status_code=400, detail=f"Unknown scan engine '{payload.engine}'.")
 
-    # Reject at the edge rather than queueing work that is certain to fail.
+    validation = scanner.validate_target(payload.target_cidr)
+    if not validation.valid:
+        raise HTTPException(status_code=400, detail=validation.reason)
+
+    # Authorized scope, enforced rather than displayed.
+    #
+    # The syntactic check above rejects public ranges and oversized CIDRs. It
+    # does not establish that this organization has any business assessing the
+    # private range being asked for. `Network.is_authorized_scope` is the
+    # record of consent, and until now nothing consulted it at launch — the
+    # authorization endpoint existed but was advisory only.
+    if not payload.authorization_confirmed:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Confirm that you are authorized to assess this target before "
+                "the scan can start."
+            ),
+        )
+    try:
+        authorization = assert_target_authorized(
+            db,
+            organization_id=current_user.organization_id,
+            target=validation.normalized_target or payload.target_cidr,
+        )
+    except AuthorizationError as exc:
+        log_action(
+            db, "scan_refused_unauthorized_scope", "scan_job",
+            current_user.organization_id, current_user.id, None,
+            metadata={"target_cidr": payload.target_cidr, "reason": str(exc)},
+        )
+        raise HTTPException(status_code=403, detail=str(exc))
+
+    # Only once the request is authorized is it worth asking whether the tool
+    # is installed. Authorization is a question about the operator's right to
+    # assess the target; it does not depend on this deployment's tooling, and
+    # answering "the engine is missing" to an unauthorized request would tell
+    # the caller less than it should.
     configuration = scanner.validate_configuration()
     if not configuration.available:
         raise HTTPException(
             status_code=409,
             detail=f"{configuration.summary} {configuration.remediation}".strip(),
         )
-
-    validation = scanner.validate_target(payload.target_cidr)
-    if not validation.valid:
-        raise HTTPException(status_code=400, detail=validation.reason)
 
     credential_id = payload.credential_profile_id
     if credential_id is not None:
@@ -113,9 +147,27 @@ def create_scan(
     db.commit()
     db.refresh(job)
 
-    # Import locally to avoid importing Celery at API startup if the broker is unreachable
+    # Import locally to avoid importing Celery at API startup if the broker is
+    # unreachable.
     from app.tasks.scan_tasks import run_network_scan
-    run_network_scan.delay(str(job.id))
+
+    try:
+        run_network_scan.delay(str(job.id))
+    except Exception as exc:  # noqa: BLE001 — broker down, auth failure, anything
+        # A job that could not be handed to a worker must not sit at QUEUED
+        # forever looking like it is about to start. This was the single most
+        # confusing failure in the product: the row was committed, the dispatch
+        # raised, and the Scan Centre showed "queued" indefinitely with nothing
+        # anywhere saying why.
+        job.status = ScanStatus.FAILED
+        job.error_message = (
+            f"The scan could not be handed to a worker: {exc}. "
+            f"Check that the Celery worker and Redis are running "
+            f"(docker compose ps worker redis)."
+        )
+        db.commit()
+        db.refresh(job)
+        raise HTTPException(status_code=503, detail=job.error_message)
 
     log_action(
         db, "start_scan", "scan_job", current_user.organization_id, current_user.id, str(job.id),
@@ -123,16 +175,27 @@ def create_scan(
             "target_cidr": job.target_cidr,
             "engine": job.engine,
             "credentialed": credential_id is not None,
+            "authorized_by_network": authorization.matched_network,
+            "authorization_confirmed_by": str(current_user.id),
         },
     )
 
-    # Notify via WebSocket in background
+    # Notify via WebSocket in background.
+    #
+    # The organization id is stringified here on purpose: connections are keyed
+    # by the `org_id` claim from the JWT, which is a string. Passing the UUID
+    # object meant every lookup in the connection map missed, so this
+    # notification was never delivered to anyone while the request reported
+    # success.
+    organization_key = str(current_user.organization_id)
+    target = job.target_cidr
+
     def send_ws_notification():
         asyncio.run(manager.broadcast_to_org(
-            current_user.organization_id, 
-            {"type": "info", "message": f"Scan initiated for {payload.target_cidr}"}
+            organization_key,
+            {"type": "info", "message": f"Scan initiated for {target}"},
         ))
-    
+
     background_tasks.add_task(send_ws_notification)
 
     return job
@@ -199,22 +262,58 @@ def cancel_scan(
     return job
 
 
-@router.delete("/bulk", status_code=204)
+@router.delete("/bulk")
 def delete_scans_bulk(
     scan_ids: list[uuid.UUID],
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(Permission.RUN_SCANS)),
 ):
+    """
+    Delete several scans, and report what actually happened.
+
+    This returned 204 and silently skipped anything it could not delete, so
+    selecting ten rows and pressing delete could remove none of them while
+    looking like it had worked. It now says which were removed and why the
+    rest were not.
+    """
     jobs = (
         db.query(ScanJob)
-        .filter(ScanJob.id.in_(scan_ids), ScanJob.organization_id == current_user.organization_id)
+        .filter(
+            ScanJob.id.in_(scan_ids),
+            ScanJob.organization_id == current_user.organization_id,
+        )
         .all()
     )
+
+    deleted: list[str] = []
+    skipped: list[dict] = []
+
     for job in jobs:
-        if job.status not in (ScanStatus.QUEUED, ScanStatus.RUNNING):
-            db.delete(job)
-            log_action(db, "delete_scan", "scan_job", current_user.organization_id, current_user.id, str(job.id))
+        if job.status is ScanStatus.RUNNING:
+            skipped.append({
+                "id": str(job.id),
+                "reason": "The scan is still running. Cancel it before deleting.",
+            })
+            continue
+        # A queued job never started, so there is nothing to interrupt and no
+        # reason to make the operator cancel it first.
+        deleted.append(str(job.id))
+        log_action(
+            db, "delete_scan", "scan_job", current_user.organization_id,
+            current_user.id, str(job.id), metadata={"status": job.status.value},
+        )
+        db.delete(job)
+
     db.commit()
+
+    missing = sorted(
+        {str(identifier) for identifier in scan_ids}
+        - {str(job.id) for job in jobs}
+    )
+    for identifier in missing:
+        skipped.append({"id": identifier, "reason": "No such scan in this organization."})
+
+    return {"deleted": deleted, "skipped": skipped}
 
 @router.delete("/{scan_id}", status_code=204)
 def delete_scan(
@@ -231,10 +330,23 @@ def delete_scan(
     if not job:
         raise HTTPException(status_code=404, detail="Scan job not found")
 
-    if job.status in (ScanStatus.QUEUED, ScanStatus.RUNNING):
-        raise HTTPException(status_code=400, detail="Cannot delete a scan that is currently running or queued. Cancel it first.")
+    # A running scan has a live subprocess behind it, so it must be cancelled
+    # first. A queued one never started — refusing to delete it forced a
+    # pointless cancel step, and while jobs were stranded at QUEUED by an
+    # absent worker it made them undeletable entirely.
+    if job.status is ScanStatus.RUNNING:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This scan is still running. Cancel it first — the worker will "
+                "stop the scanner process — then delete it."
+            ),
+        )
 
+    log_action(
+        db, "delete_scan", "scan_job", current_user.organization_id,
+        current_user.id, str(job.id), metadata={"status": job.status.value},
+    )
     db.delete(job)
     db.commit()
-    log_action(db, "delete_scan", "scan_job", current_user.organization_id, current_user.id, str(job.id))
 

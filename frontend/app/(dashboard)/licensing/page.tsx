@@ -1,135 +1,346 @@
 "use client";
 
-import { 
-  BadgeDollarSign, CheckCircle2, ShieldCheck, 
-  Zap, Users, Activity, BrainCircuit, ShieldAlert
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  AlertTriangle, BadgeCheck, Building2, Check, Loader2, Mail,
+  MessageCircle, Pencil, Phone, ScrollText, Users, X,
 } from "lucide-react";
+import { api, ApiError } from "@/lib/api";
+import { useAuthStore } from "@/store/auth";
+import { cn } from "@/lib/utils";
+
+/**
+ * Licensing.
+ *
+ * This page was entirely fabricated: a hardcoded plan called "Omni One", a
+ * renewal date of "Dec 31, 2028", an org named "Acme Corp Global", a tenant id
+ * `org_7f8a9b2c1d3e4f5`, an allocation of 8,492 of 10,000 assets, and a
+ * progress bar with `style={{ width: "85%" }}`. None of it came from anywhere,
+ * and the real values were sitting unused on `/organizations/current` —
+ * `subscription_plan`, `license_seats`, `name`.
+ *
+ * Seat usage is now the actual count of active users against the actual seat
+ * limit, and the plan and organization name are read, not invented.
+ */
+
+const SALES_EMAIL = "ykamranali7777@gmail.com";
+const SALES_PHONE = "+971508169288";
+// WhatsApp's click-to-chat expects the number without punctuation.
+const SALES_WHATSAPP = SALES_PHONE.replace(/[^0-9]/g, "");
+
+interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  subscription_plan: string;
+  license_seats: number;
+  is_active: boolean;
+  created_at?: string;
+}
+
+interface UserRecord {
+  id: string;
+  is_active: boolean;
+}
+
+function SeatMeter({ used, total }: { used: number; total: number }) {
+  const safeTotal = Math.max(total, 0);
+  const percent = safeTotal > 0 ? Math.min(100, (used / safeTotal) * 100) : 0;
+  const tone =
+    percent >= 95 ? "bg-critical" : percent >= 80 ? "bg-high" : "bg-primary";
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between">
+        <p className="text-2xl font-bold text-ink">
+          {used}
+          <span className="text-base font-normal text-muted"> / {safeTotal || "—"}</span>
+        </p>
+        {safeTotal > 0 && (
+          <p className="text-xs text-muted">{percent.toFixed(0)}% used</p>
+        )}
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-hover">
+        {/* Width comes from the real ratio. It was a literal 85% before. */}
+        <div
+          className={cn("h-full rounded-full transition-all", tone)}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      {safeTotal > 0 && used > safeTotal && (
+        <p className="mt-2 text-xs text-critical">
+          {used - safeTotal} account(s) over the licensed limit.
+        </p>
+      )}
+    </div>
+  );
+}
 
 export default function LicensingPage() {
+  const queryClient = useQueryClient();
+  const currentUser = useAuthStore((state) => state.user);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({ subscription_plan: "", license_seats: 0 });
+  const [saveError, setSaveError] = useState("");
+
+  const { data: organization, isLoading, error } = useQuery<Organization>({
+    queryKey: ["organizations", "current"],
+    queryFn: () => api.get<Organization>("/organizations/current"),
+  });
+
+  const { data: users } = useQuery<UserRecord[]>({
+    queryKey: ["users"],
+    queryFn: () => api.get<UserRecord[]>("/users"),
+    retry: false,
+  });
+
+  const save = useMutation({
+    // Plan and seats are a platform-level change, restricted to super
+    // administrators — an organization administrator raising their own seat
+    // limit is a billing decision, not a setting.
+    mutationFn: () =>
+      api.patch(`/organizations/${organization!.id}/license`, {
+        subscription_plan: form.subscription_plan,
+        license_seats: Number(form.license_seats),
+      }),
+    onSuccess: () => {
+      setEditing(false);
+      setSaveError("");
+      void queryClient.invalidateQueries({ queryKey: ["organizations"] });
+    },
+    onError: (caught) =>
+      setSaveError(
+        caught instanceof ApiError ? caught.message : "The change could not be saved.",
+      ),
+  });
+
+  const startEditing = () => {
+    if (!organization) return;
+    setForm({
+      subscription_plan: organization.subscription_plan,
+      license_seats: organization.license_seats,
+    });
+    setSaveError("");
+    setEditing(true);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted" />
+      </div>
+    );
+  }
+
+  if (error || !organization) {
+    return (
+      <div className="p-6">
+        <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-400">
+          <AlertTriangle className="h-5 w-5" />
+          {error instanceof ApiError
+            ? error.message
+            : "Licensing information could not be loaded."}
+        </div>
+      </div>
+    );
+  }
+
+  const activeUsers = users?.filter((user) => user.is_active).length ?? 0;
+  const canManage = Boolean(currentUser?.is_super_admin);
+
   return (
     <div className="space-y-6 p-6">
-      <div className="flex items-end justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-ink">Licensing & Subscriptions</h1>
-          <p className="mt-2 text-muted">Manage your Omni Cyber Guard enterprise subscription</p>
+          <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight text-ink">
+            <ScrollText className="h-8 w-8 text-primary" />
+            Licensing
+          </h1>
+          <p className="mt-2 text-muted">
+            Your subscription and seat usage, read from this organization&apos;s
+            record.
+          </p>
+        </div>
+
+        {canManage && !editing && (
+          <button
+            type="button"
+            onClick={startEditing}
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink hover:bg-surface-hover"
+          >
+            <Pencil className="h-4 w-4" />
+            Edit licence
+          </button>
+        )}
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-3">
+        <div className="rounded-xl border border-border bg-surface p-6">
+          <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted">
+            <BadgeCheck className="h-4 w-4" />
+            Plan
+          </div>
+
+          {editing ? (
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="mb-1 block text-[11px] text-muted">Plan name</label>
+                <input
+                  value={form.subscription_plan}
+                  onChange={(event) =>
+                    setForm((previous) => ({
+                      ...previous,
+                      subscription_plan: event.target.value,
+                    }))
+                  }
+                  className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm text-ink focus:border-primary focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] text-muted">Licensed seats</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.license_seats}
+                  onChange={(event) =>
+                    setForm((previous) => ({
+                      ...previous,
+                      license_seats: Number(event.target.value),
+                    }))
+                  }
+                  className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm text-ink focus:border-primary focus:outline-none"
+                />
+              </div>
+
+              {saveError && <p className="text-xs text-red-400">{saveError}</p>}
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => save.mutate()}
+                  disabled={save.isPending}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50"
+                >
+                  {save.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Check className="h-3.5 w-3.5" />
+                  )}
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditing(false)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:text-ink"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <p className="mt-3 text-2xl font-bold capitalize text-ink">
+                {organization.subscription_plan || "Not set"}
+              </p>
+              <p className="mt-2 text-xs text-muted">
+                {organization.is_active
+                  ? "This organization is active."
+                  : "This organization is deactivated."}
+              </p>
+            </>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-border bg-surface p-6">
+          <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted">
+            <Users className="h-4 w-4" />
+            Seats in use
+          </div>
+          <div className="mt-3">
+            <SeatMeter used={activeUsers} total={organization.license_seats} />
+          </div>
+          <p className="mt-3 text-xs text-muted">
+            Counted from active user accounts in this organization.
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-border bg-surface p-6">
+          <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted">
+            <Building2 className="h-4 w-4" />
+            Organization
+          </div>
+          <p className="mt-3 truncate text-lg font-semibold text-ink" title={organization.name}>
+            {organization.name}
+          </p>
+          <dl className="mt-3 space-y-1.5 text-xs">
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">Identifier</dt>
+              <dd className="truncate font-mono text-ink/80" title={organization.slug}>
+                {organization.slug}
+              </dd>
+            </div>
+            {organization.created_at && (
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted">Created</dt>
+                <dd className="text-ink/80">
+                  {new Date(organization.created_at).toLocaleDateString()}
+                </dd>
+              </div>
+            )}
+          </dl>
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-6">
-          <div className="glossy-card relative overflow-hidden rounded-xl border border-primary/30 p-8 shadow-[0_0_30px_rgba(var(--color-primary)/0.15)]">
-            <div className="absolute -right-20 -top-20 rounded-full bg-primary/10 p-32 blur-[80px]" />
-            
-            <div className="relative z-10 flex flex-col md:flex-row gap-8 items-start justify-between">
-              <div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-sm font-bold uppercase tracking-widest text-primary">
-                  <ShieldCheck className="h-4 w-4" /> Enterprise Edition
-                </div>
-                <h2 className="mt-6 text-4xl font-bold text-ink">Omni One</h2>
-                <p className="mt-2 text-lg text-muted">Full exposure management platform.</p>
-                
-                <div className="mt-8 space-y-4">
-                  <div className="flex items-center gap-4 border-l-2 border-primary/50 pl-4">
-                    <div>
-                      <p className="text-sm font-medium text-muted uppercase tracking-wider">Status</p>
-                      <p className="text-lg font-bold text-emerald-500">Active</p>
-                    </div>
-                    <div className="h-10 w-px bg-border"></div>
-                    <div>
-                      <p className="text-sm font-medium text-muted uppercase tracking-wider">Renewal Date</p>
-                      <p className="text-lg font-bold text-ink">Dec 31, 2028</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="w-full md:w-auto rounded-xl border border-border bg-surface p-6 shadow-lg min-w-[250px]">
-                <p className="text-sm font-semibold uppercase tracking-wider text-muted">Asset Allocation</p>
-                <div className="mt-4 flex items-end gap-2">
-                  <span className="text-4xl font-bold text-ink">8,492</span>
-                  <span className="text-sm font-medium text-muted mb-1">/ 10,000</span>
-                </div>
-                <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-surface-hover">
-                  <div className="h-full bg-primary rounded-full" style={{ width: "85%" }} />
-                </div>
-                <p className="mt-2 text-xs text-muted text-right">85% Utilized</p>
-              </div>
-            </div>
-          </div>
+      <section className="rounded-xl border border-border bg-surface p-6">
+        <h2 className="text-sm font-semibold text-ink">Talk to sales</h2>
+        <p className="mt-1 text-sm text-muted">
+          To change your plan, add seats or discuss a deployment, get in touch
+          directly.
+        </p>
 
-          <div className="rounded-xl border border-border bg-surface shadow-lg backdrop-blur-xl p-6">
-            <h3 className="text-lg font-bold text-ink mb-6">Included Capabilities</h3>
-            
-            <div className="grid sm:grid-cols-2 gap-6">
-              {[
-                { icon: ShieldAlert, title: "Vulnerability Management", desc: "Continuous scanning and assessment" },
-                { icon: Activity, title: "Attack Surface Management", desc: "External domain and IP discovery" },
-                { icon: BrainCircuit, title: "AI Security Engineer", desc: "Context-aware threat analysis" },
-                { icon: Zap, title: "Threat Intelligence", desc: "CISA KEV and EPSS integration" },
-              ].map((feature, i) => (
-                <div key={i} className="flex gap-4">
-                  <div className="rounded-lg bg-surface-hover p-2 h-fit border border-border/50">
-                    <feature.icon className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-ink">{feature.title}</h4>
-                    <p className="text-sm text-muted mt-1">{feature.desc}</p>
-                  </div>
-                </div>
-              ))}
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <a
+            href={`mailto:${SALES_EMAIL}?subject=${encodeURIComponent(
+              `Omni Cyber Guard — licensing enquiry (${organization.name})`,
+            )}`}
+            className="flex items-center gap-3 rounded-lg border border-border bg-background p-4 transition-colors hover:border-primary/40 hover:bg-surface-hover"
+          >
+            <Mail className="h-5 w-5 shrink-0 text-primary" />
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-ink">Email</p>
+              <p className="truncate text-[11px] text-muted">{SALES_EMAIL}</p>
             </div>
-          </div>
+          </a>
+
+          <a
+            href={`https://wa.me/${SALES_WHATSAPP}?text=${encodeURIComponent(
+              `Hello — I'd like to talk about Omni Cyber Guard licensing for ${organization.name}.`,
+            )}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 rounded-lg border border-border bg-background p-4 transition-colors hover:border-primary/40 hover:bg-surface-hover"
+          >
+            <MessageCircle className="h-5 w-5 shrink-0 text-emerald-400" />
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-ink">WhatsApp</p>
+              <p className="truncate text-[11px] text-muted">{SALES_PHONE}</p>
+            </div>
+          </a>
+
+          <a
+            href={`tel:${SALES_PHONE}`}
+            className="flex items-center gap-3 rounded-lg border border-border bg-background p-4 transition-colors hover:border-primary/40 hover:bg-surface-hover"
+          >
+            <Phone className="h-5 w-5 shrink-0 text-sky-400" />
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-ink">Call</p>
+              <p className="truncate text-[11px] text-muted">{SALES_PHONE}</p>
+            </div>
+          </a>
         </div>
-
-        <div className="space-y-6">
-          <div className="rounded-xl border border-border bg-surface shadow-lg backdrop-blur-xl p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <Users className="h-5 w-5 text-primary" />
-              <h3 className="text-lg font-bold text-ink">Organization Details</h3>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted">Organization Name</p>
-                <p className="font-medium text-ink mt-1">Acme Corp Global</p>
-              </div>
-              <div className="pt-4 border-t border-border/50">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted">Tenant ID</p>
-                <p className="font-mono text-sm text-ink mt-1">org_7f8a9b2c1d3e4f5</p>
-              </div>
-              <div className="pt-4 border-t border-border/50">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted">Support Tier</p>
-                <p className="font-medium text-ink mt-1 flex items-center gap-2">
-                  Premium 24/7 <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-border bg-surface-hover shadow-lg p-6 text-center">
-            <BadgeDollarSign className="mx-auto h-8 w-8 text-muted/50 mb-3" />
-            <h3 className="font-semibold text-ink">Need more capacity?</h3>
-            <p className="text-sm text-muted mt-2 mb-4">Contact your technical account manager to increase your asset limit.</p>
-            <div className="flex flex-col gap-2">
-              <a href="mailto:ykamranali7777@gmail.com" className="w-full rounded-lg bg-primary/10 border border-primary/20 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/20 text-center flex items-center justify-center">
-                Email Sales
-              </a>
-              <a href="https://wa.me/971508169288" target="_blank" rel="noopener noreferrer" className="w-full rounded-lg bg-[#25D366]/10 border border-[#25D366]/20 px-4 py-2 text-sm font-semibold text-[#25D366] transition-colors hover:bg-[#25D366]/20 text-center flex items-center justify-center">
-                WhatsApp Sales
-              </a>
-            </div>
-            
-            <div className="mt-6 pt-4 border-t border-border/50 flex justify-center gap-4">
-              <button className="text-xs text-muted hover:text-primary transition-colors flex items-center gap-1" onClick={() => alert('License edit not implemented')}>
-                Edit License
-              </button>
-              <button className="text-xs text-muted hover:text-critical transition-colors flex items-center gap-1" onClick={() => alert('License delete not implemented')}>
-                Delete License
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      </section>
     </div>
   );
 }

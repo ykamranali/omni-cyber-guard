@@ -8,7 +8,10 @@ from app.core.rbac import Permission
 from app.core.security import hash_password
 from app.models.organization import Organization
 from app.models.user import User
-from app.schemas.organization import OrganizationOut, OrganizationBrandingUpdate, OrganizationCreate, OrganizationSettingsUpdate
+from app.schemas.organization import (
+    OrganizationBrandingUpdate, OrganizationCreate, OrganizationLicenseUpdate,
+    OrganizationOut, OrganizationSettingsUpdate, OrganizationUpdate,
+)
 from app.services.org_provisioning import provision_new_organization
 from app.services.audit import log_action
 
@@ -139,3 +142,122 @@ def get_organization(
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
     return org
+
+
+@router.patch("/{organization_id}", response_model=OrganizationOut)
+def update_organization(
+    organization_id: uuid.UUID,
+    payload: OrganizationUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+):
+    """Rename an organization, or activate/deactivate it."""
+    org = db.query(Organization).filter(Organization.id == organization_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    changes = payload.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(status_code=400, detail="No changes were supplied.")
+
+    # Deactivating the organization the caller is signed in to would lock them
+    # out of the platform they are administering.
+    if changes.get("is_active") is False and org.id == current_user.organization_id:
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot deactivate the organization you are signed in to.",
+        )
+
+    for field, value in changes.items():
+        setattr(org, field, value)
+    db.commit()
+    db.refresh(org)
+
+    log_action(
+        db, "update_organization", "organization", org.id, current_user.id,
+        str(org.id), metadata=changes,
+    )
+    return org
+
+
+@router.patch("/{organization_id}/license", response_model=OrganizationOut)
+def update_organization_license(
+    organization_id: uuid.UUID,
+    payload: OrganizationLicenseUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+):
+    """
+    Change an organization's plan or seat count.
+
+    Super administrators only, on purpose: an organization administrator
+    raising their own seat limit is a billing decision, not a setting.
+    """
+    org = db.query(Organization).filter(Organization.id == organization_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    changes = payload.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(status_code=400, detail="No changes were supplied.")
+
+    new_seats = changes.get("license_seats")
+    if new_seats is not None:
+        active_users = db.query(User).filter(
+            User.organization_id == org.id, User.is_active.is_(True)
+        ).count()
+        if new_seats < active_users:
+            # Silently allowing this would put the organization over its own
+            # limit with no way to see how it happened.
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"{org.name} has {active_users} active account(s). Deactivate "
+                    f"accounts before reducing the limit to {new_seats}."
+                ),
+            )
+
+    for field, value in changes.items():
+        setattr(org, field, value)
+    db.commit()
+    db.refresh(org)
+
+    log_action(
+        db, "update_license", "organization", org.id, current_user.id,
+        str(org.id), metadata=changes,
+    )
+    return org
+
+
+@router.delete("/{organization_id}", status_code=204)
+def delete_organization(
+    organization_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+):
+    """
+    Permanently remove an organization and everything in it.
+
+    Every tenant-scoped table cascades from `organizations.id`, so this deletes
+    the assets, findings, scans, credentials and audit trail as well. There is
+    no undo, which is why deactivation exists as the reversible alternative.
+    """
+    org = db.query(Organization).filter(Organization.id == organization_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    if org.id == current_user.organization_id:
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot delete the organization you are signed in to.",
+        )
+
+    name = org.name
+    # Recorded against the platform, not the organization, because the
+    # organization's own audit rows are about to be cascaded away with it.
+    log_action(
+        db, "delete_organization", "organization", None, current_user.id,
+        str(organization_id), metadata={"name": name},
+    )
+    db.delete(org)
+    db.commit()

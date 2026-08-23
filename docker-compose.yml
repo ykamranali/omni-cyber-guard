@@ -93,6 +93,39 @@ services:
     # real LAN on Windows/Mac").
     # network_mode: host
 
+  # Celery beat — the scheduler.
+  #
+  # Without this service NOTHING on a timetable runs: no CVE/EPSS/KEV
+  # synchronisation, no scheduled scans, no nightly exposure snapshots, no
+  # exposure-graph rebuilds, no risk-acceptance expiry. The worker alone only
+  # consumes jobs that something else enqueues, so the entire beat_schedule in
+  # app/core/celery_app.py was dead configuration in this deployment.
+  #
+  # It runs as its own service rather than as `worker -B` so that scaling the
+  # worker to more than one replica cannot start a second scheduler and fire
+  # every scheduled job twice.
+  beat:
+    build: ./backend
+    container_name: ocg-beat
+    restart: unless-stopped
+    command: celery -A app.core.celery_app beat --loglevel=info --pidfile=
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://ocg_app:ocg_password@postgres:5432/omni_cyber_guard
+      REDIS_URL: redis://redis:6379/0
+      # The scheduler only enqueues; it never captures packets.
+      ENABLE_PASSIVE_MONITOR: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    cap_drop:
+      - ALL
+    volumes:
+      - ./backend:/app
+
   frontend:
     build: ./frontend
     container_name: ocg-frontend
