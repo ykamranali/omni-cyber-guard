@@ -78,6 +78,18 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
+    # The image's HEALTHCHECK curls http://localhost:8000/api/health, which is
+    # correct for the API and meaningless here — this container runs Celery and
+    # serves no HTTP, so it reported "unhealthy" permanently while working
+    # perfectly. A permanently-red health signal is worse than none: it trains
+    # you to ignore the one indicator that should mean something. Replaced with
+    # a check that asks the worker itself whether it is accepting work.
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.core.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
     # Network scans (nmap host/OS discovery) need raw-socket access. These
     # capabilities only permit crafting/reading raw packets on networks this
     # container can already reach — they do not grant host-level access.
@@ -125,6 +137,11 @@ services:
       - ALL
     volumes:
       - ./backend:/app
+    # celery beat has no inspect interface to query, so there is no honest
+    # liveness probe to run against it. Declaring none is accurate; a check
+    # that always exits 0 would be a green light that means nothing.
+    healthcheck:
+      disable: true
 
   frontend:
     # NEXT_PUBLIC_API_BASE_URL has to be a BUILD argument, not a runtime

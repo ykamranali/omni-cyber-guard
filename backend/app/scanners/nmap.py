@@ -18,6 +18,7 @@ from app.scanners.contract import (
     ScannerResult, TargetValidation,
 )
 from app.scanners.subprocess_adapter import SubprocessContext, SubprocessScannerAdapter
+from app.services.scan_reachability import assess_target
 from app.services.network_scanner import (
     RISKY_PORTS, ScanAuthorizationError, validate_authorized_target, _parse_nmap_xml,
 )
@@ -79,8 +80,37 @@ class NmapScanner(SubprocessScannerAdapter):
             return TargetValidation(valid=False, reason=str(exc))
         return TargetValidation(valid=True, normalized_target=str(network))
 
+    def preflight_notes(self, request: ScanRequest) -> list[str]:
+        return assess_target(request.target).as_log_lines()
+
     def build_command(self, request: ScanRequest, context_dir: str) -> list[str]:
         xml_path = os.path.join(context_dir, XML_FILENAME)
+
+        if assess_target(request.target).degraded:
+            # The worker is not on the target's segment, so ARP discovery is
+            # impossible and every host would be reported down. -Pn skips
+            # discovery and probes regardless, which is the only way to see
+            # anything at all from behind NAT.
+            #
+            # -A and the vuln script set are dropped deliberately rather than
+            # kept for appearances: OS fingerprinting needs raw packets whose
+            # replies NAT does not preserve, and running NSE scripts against
+            # every address in a /24 that is assumed up spends hours producing
+            # nothing. Service detection is kept because banners do survive a
+            # TCP connection.
+            return [
+                "nmap",
+                "-Pn",
+                "-sV",
+                "-F",
+                "-T4",
+                "--max-retries", "1",
+                "--host-timeout", "2m",
+                "-v",
+                "-oX", xml_path,
+                request.target,
+            ]
+
         return [
             "nmap",
             "-A",                       # OS detection, version detection, scripts, traceroute

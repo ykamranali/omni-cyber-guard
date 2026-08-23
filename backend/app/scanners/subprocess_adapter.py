@@ -93,6 +93,17 @@ class SubprocessScannerAdapter(ScannerAdapter):
         """Whether a line is worth forwarding to the live scan log."""
         return True
 
+    def preflight_notes(self, request: ScanRequest) -> list[str]:
+        """
+        Observations about the environment to record before the tool starts.
+
+        These go to the top of the operator-visible scan log and into the stored
+        output, so a result that is thin because of where the worker sits is
+        explained in the same place the result is read. Returning nothing means
+        nothing was found worth saying — never a silent degradation.
+        """
+        return []
+
     def collect_results(self, context: SubprocessContext) -> ScannerResult:
         """Parse whatever the finished command produced."""
         raise NotImplementedError
@@ -121,6 +132,14 @@ class SubprocessScannerAdapter(ScannerAdapter):
 
         import tempfile
 
+        # Computed before anything is launched, so it is recorded even if the
+        # process fails to start.
+        try:
+            notes = self.preflight_notes(request)
+        except Exception:
+            logger.exception("scanner %s: preflight check failed", self.name)
+            notes = []
+
         workdir = tempfile.mkdtemp(prefix=f"ocg-{self.name}-")
         command = self.build_command(request, workdir)
 
@@ -135,6 +154,11 @@ class SubprocessScannerAdapter(ScannerAdapter):
 
         context = SubprocessContext(process=process, request=request)
         context.artifacts["workdir"] = workdir
+
+        for note in notes:
+            context.output_lines.append(note)
+            if on_output:
+                on_output(note)
 
         def drain() -> None:
             # Draining on a thread keeps a chatty tool from blocking on a full
