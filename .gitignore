@@ -12,3 +12,11 @@ frontend/.env.local
 
 # OS
 .DS_Store
+
+# Celery beat's own scheduler state, written into the bind-mounted source tree
+# at runtime. It is a shelve database of when each periodic task last fired -
+# machine state, not source. Committing it means one developer's last-run
+# timestamps decide whether another's scheduler thinks a job is overdue.
+celerybeat-schedule
+celerybeat-schedule.*
+celerybeat.pid

@@ -23,7 +23,13 @@ function Section($t) {
 }
 
 Section "0. Scan jobs as they stand right now (before any change)"
-docker compose exec -T postgres psql -U ocg_app -d omni_cyber_guard -c `
+# Queried as the postgres superuser on purpose. ocg_app is subject to row-level
+# security, which filters every tenant table on app.current_org_id; from a bare
+# psql session that setting is unset, so these tables return zero rows whatever
+# they contain. Superusers are exempt from RLS, which is exactly why the
+# application must never connect as one - but it is what makes an
+# out-of-band inspection query tell the truth.
+docker compose exec -T postgres psql -U postgres -d omni_cyber_guard -c `
   "SELECT id, engine, target_cidr, status, created_at, left(coalesce(error_message,''), 80) AS error FROM scan_jobs ORDER BY created_at DESC LIMIT 10;" 2>&1
 
 Section "1. Stopping the stack"
@@ -74,7 +80,7 @@ Section "10. Reachability preflight - what the worker can actually see"
 docker compose exec -T worker python -c "from app.services.scan_reachability import assess_target; r = assess_target('192.168.1.0/24'); print('on_link:', r.on_link); print(r.summary); print(); [print(l) for l in r.as_log_lines()]" 2>&1
 
 Section "11. Authorized scope - a scan is refused without one"
-docker compose exec -T postgres psql -U ocg_app -d omni_cyber_guard -c `
+docker compose exec -T postgres psql -U postgres -d omni_cyber_guard -c `
   "SELECT name, cidr, is_authorized_scope FROM networks ORDER BY created_at DESC LIMIT 10;" 2>&1
 Write-Host ""
 Write-Host "192.168.1.0/24 must appear here with is_authorized_scope = t."
