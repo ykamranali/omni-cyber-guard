@@ -1,0 +1,24 @@
+# Normalise line endings.
+#
+# Eight source files were rewritten CRLF by a Windows tool and showed up as
+# 2,096 changed lines that were not changes at all — every line "modified" by
+# its ending alone. That noise hides real edits in review and creates conflicts
+# between machines. Git now stores LF and checks out LF everywhere.
+#
+# LF is also required rather than cosmetic for the files below: a shell script
+# or Dockerfile with CRLF endings fails inside a Linux container with errors
+# like "/bin/sh^M: bad interpreter".
+* text=auto eol=lf
+
+# Binaries git must never touch.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+
+# Generated; collapse it in diffs so a dependency bump does not bury a review.
+frontend/package-lock.json linguist-generated=true -diff

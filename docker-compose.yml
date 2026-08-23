@@ -127,11 +127,23 @@ services:
       - ./backend:/app
 
   frontend:
-    build: ./frontend
+    # NEXT_PUBLIC_API_BASE_URL has to be a BUILD argument, not a runtime
+    # environment variable. Next.js inlines every NEXT_PUBLIC_* value into the
+    # client JavaScript when `next build` runs, so setting it under
+    # `environment:` here had no effect whatsoever — the browser used whatever
+    # was baked in at image-build time, which was the fallback in lib/api.ts.
+    #
+    # Change OCG_PUBLIC_API_BASE_URL (in your .env or your shell) to the
+    # address your browsers will use, then rebuild:
+    #
+    #   OCG_PUBLIC_API_BASE_URL=https://ocg.example.com/api/v1 \
+    #     docker compose build frontend
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${OCG_PUBLIC_API_BASE_URL:-http://localhost:8000/api/v1}
     container_name: ocg-frontend
     restart: unless-stopped
-    environment:
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
     ports:
       - "3000:3000"
     depends_on:

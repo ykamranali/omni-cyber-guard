@@ -1,38 +1,110 @@
-name: Docker Build and Publish
+name: Container images
+
+# Builds the backend and frontend images and publishes them to the GitHub
+# Container Registry attached to this repository.
+#
+# Authentication uses the GITHUB_TOKEN that Actions injects automatically, so
+# there is nothing to configure — no registry username, no access token, no
+# repository secret. The images appear under
+# https://github.com/ykamranali?tab=packages once the first run finishes.
+#
+# Published images are PRIVATE by default, inheriting the repository's
+# visibility. To pull them on a server:
+#
+#   echo <a-github-PAT-with-read:packages> | docker login ghcr.io -u ykamranali --password-stdin
+#   docker pull ghcr.io/ykamranali/omni-cyber-guard-backend:latest
+#
+# Pull requests build both images but publish neither, so a proposed change is
+# proven to compile without a fork being able to overwrite a published tag.
 
 on:
   push:
-    branches: [ "master", "main" ]
+    branches: ["master", "main"]
+    tags: ["v*"]
   pull_request:
-    branches: [ "master", "main" ]
+    branches: ["master", "main"]
+  workflow_dispatch:
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
 
 jobs:
-  build-and-push:
+  build:
+    name: ${{ matrix.component }}
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: backend
+            context: ./backend
+            image: omni-cyber-guard-backend
+          - component: frontend
+            context: ./frontend
+            image: omni-cyber-guard-frontend
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - name: Check out the repository
+        uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v2
+      # Skipped for pull requests: a PR from a fork must not be able to
+      # authenticate against the registry.
+      - name: Log in to the GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-          
-      # Assuming you have a backend and frontend image. Adjust image names accordingly.
-      - name: Build and push Backend
-        uses: docker/build-push-action@v4
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
         with:
-          context: ./backend
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      # NEXT_PUBLIC_API_BASE_URL is inlined into the client bundle by
+      # `next build`; it cannot be changed after the image is built. The
+      # published image therefore carries whichever URL is configured here.
+      #
+      # Set a repository variable named PUBLIC_API_BASE_URL (Settings →
+      # Secrets and variables → Actions → Variables) to the address your
+      # users' browsers will call, e.g. https://ocg.example.com/api/v1.
+      # Without it the image is built for a single-host deployment where the
+      # browser, the frontend and the backend are all on the same machine.
+      - name: Build and publish
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/omni-cyber-guard-backend:latest
-          
-      - name: Build and push Frontend
-        uses: docker/build-push-action@v4
-        with:
-          context: ./frontend
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/omni-cyber-guard-frontend:latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=${{ vars.PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1' }}
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+
+      - name: Report what was published
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "### ${{ matrix.component }} image published" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
