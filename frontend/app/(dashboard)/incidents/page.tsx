@@ -8,7 +8,7 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
 import { Modal } from "@/components/ui/modal";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface Incident {
@@ -51,7 +51,7 @@ export default function IncidentsPage() {
       setError(null);
     } catch (caught) {
       setError(
-        caught instanceof ApiError ? caught.message : "Incidents could not be loaded.",
+        errorMessage(caught, "Incidents could not be loaded."),
       );
     } finally {
       setLoading(false);
@@ -75,9 +75,7 @@ export default function IncidentsPage() {
       // A failure used to be swallowed to the console — and, on the backend,
       // written into the incident's playbook field as the exception text.
       setError(
-        caught instanceof ApiError
-          ? caught.message
-          : "The playbook could not be generated. The incident is unchanged.",
+        errorMessage(caught, "The playbook could not be generated. The incident is unchanged."),
       );
     } finally {
       setGeneratingFor(null);
@@ -99,9 +97,7 @@ export default function IncidentsPage() {
       await fetchIncidents();
     } catch (caught) {
       setDeclareError(
-        caught instanceof ApiError
-          ? caught.message
-          : "The incident could not be declared.",
+        errorMessage(caught, "The incident could not be declared."),
       );
     } finally {
       setDeclaring(false);

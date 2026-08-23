@@ -9,7 +9,7 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { OrgFormModal, OrgFormValues } from "@/components/organizations/org-form-modal";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { useBranding } from "@/components/providers/branding-provider";
 import { useAuthStore } from "@/store/auth";
 
@@ -68,7 +68,7 @@ export default function OrganizationsPage() {
       setTimeout(() => setBrandingSaved(false), 2500);
     },
     onError: (err) =>
-      setError(err instanceof ApiError ? err.message : "Branding could not be saved."),
+      setError(errorMessage(err, "Branding could not be saved.")),
   });
 
   const renameOrg = useMutation({
@@ -79,7 +79,7 @@ export default function OrganizationsPage() {
       setError(null);
     },
     onError: (err) =>
-      setError(err instanceof ApiError ? err.message : "The organization could not be renamed."),
+      setError(errorMessage(err, "The organization could not be renamed.")),
   });
 
   const setOrgActive = useMutation({
@@ -91,7 +91,7 @@ export default function OrganizationsPage() {
     },
     onError: (err) =>
       setError(
-        err instanceof ApiError ? err.message : "The organization could not be updated.",
+        errorMessage(err, "The organization could not be updated."),
       ),
   });
 
@@ -103,7 +103,7 @@ export default function OrganizationsPage() {
     },
     onError: (err) =>
       setError(
-        err instanceof ApiError ? err.message : "The organization could not be deleted.",
+        errorMessage(err, "The organization could not be deleted."),
       ),
   });
 
@@ -114,7 +114,7 @@ export default function OrganizationsPage() {
       setModalOpen(false);
       setError(null);
     },
-    onError: (err) => setError(err instanceof ApiError ? err.message : "Failed to create organization"),
+    onError: (err) => setError(errorMessage(err, "Failed to create organization")),
   });
 
   function handleBrandingSubmit(e: FormEvent) {

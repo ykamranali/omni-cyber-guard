@@ -6,7 +6,7 @@ import {
   AlertTriangle, ChevronLeft, ChevronRight, Download, FileClock, Loader2,
   Search, X,
 } from "lucide-react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 
 /**
  * Audit log.
@@ -136,7 +136,7 @@ export default function AuditLogsPage() {
       );
     } catch (caught) {
       setExportError(
-        caught instanceof ApiError ? caught.message : "The export did not complete.",
+        errorMessage(caught, "The export did not complete."),
       );
     } finally {
       setExporting(false);
@@ -306,7 +306,7 @@ export default function AuditLogsPage() {
       {error && (
         <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-400">
           <AlertTriangle className="h-5 w-5" />
-          {error instanceof ApiError ? error.message : "The audit log could not be loaded."}
+          {errorMessage(error, "The audit log could not be loaded.")}
         </div>
       )}
 

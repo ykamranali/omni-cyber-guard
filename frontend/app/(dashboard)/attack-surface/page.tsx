@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle, Globe, Loader2, Plus, RadioTower, ShieldCheck, Trash2,
 } from "lucide-react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 
 /**
  * External attack surface.
@@ -83,7 +83,7 @@ export default function AttackSurfacePage() {
     },
     onError: (caught) =>
       setFormError(
-        caught instanceof ApiError ? caught.message : "The domain could not be registered.",
+        errorMessage(caught, "The domain could not be registered."),
       ),
   });
 
@@ -167,7 +167,7 @@ export default function AttackSurfacePage() {
       {error && (
         <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-400">
           <AlertTriangle className="h-5 w-5" />
-          {error instanceof ApiError ? error.message : "The attack surface could not be loaded."}
+          {errorMessage(error, "The attack surface could not be loaded.")}
         </div>
       )}
 

@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 /**
@@ -75,9 +75,7 @@ export default function RemediationPage() {
         setError(null);
       } catch (caught) {
         setError(
-          caught instanceof ApiError
-            ? caught.message
-            : "Remediation tasks could not be loaded.",
+          errorMessage(caught, "Remediation tasks could not be loaded."),
         );
       } finally {
         setLoading(false);

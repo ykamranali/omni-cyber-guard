@@ -4,7 +4,7 @@ import { useState } from "react";
 import {
   AlertTriangle, CheckCircle2, Loader2, Plug, RefreshCw, XCircle,
 } from "lucide-react";
-import { ApiError } from "@/lib/api";
+import { ApiError, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 /**
@@ -87,9 +87,7 @@ export function IntegrationPanel({
       await onRun(provider);
     } catch (caught) {
       const detail =
-        caught instanceof ApiError
-          ? caught.message
-          : "The request did not complete.";
+        errorMessage(caught, "The request did not complete.");
       setErrors((previous) => ({ ...previous, [provider]: detail }));
     } finally {
       setBusy(null);

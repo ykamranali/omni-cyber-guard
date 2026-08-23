@@ -6,7 +6,7 @@ import {
   AlertTriangle, BadgeCheck, Building2, Check, Loader2, Mail,
   MessageCircle, Pencil, Phone, ScrollText, Users, X,
 } from "lucide-react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { cn } from "@/lib/utils";
 
@@ -111,7 +111,7 @@ export default function LicensingPage() {
     },
     onError: (caught) =>
       setSaveError(
-        caught instanceof ApiError ? caught.message : "The change could not be saved.",
+        errorMessage(caught, "The change could not be saved."),
       ),
   });
 
@@ -138,9 +138,7 @@ export default function LicensingPage() {
       <div className="p-6">
         <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-400">
           <AlertTriangle className="h-5 w-5" />
-          {error instanceof ApiError
-            ? error.message
-            : "Licensing information could not be loaded."}
+          {errorMessage(error, "Licensing information could not be loaded.")}
         </div>
       </div>
     );

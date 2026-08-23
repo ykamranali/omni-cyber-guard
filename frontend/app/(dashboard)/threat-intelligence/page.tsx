@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 /**
@@ -132,9 +132,7 @@ export default function ThreatIntelligencePage() {
       <div className="p-6">
         <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-400">
           <AlertTriangle className="h-5 w-5" />
-          {error instanceof ApiError
-            ? error.message
-            : "Threat intelligence could not be loaded."}
+          {errorMessage(error, "Threat intelligence could not be loaded.")}
         </div>
       </div>
     );

@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { UserFormModal, UserFormValues, RoleOut } from "@/components/users/user-form-modal";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 
 interface UserOut {
@@ -44,7 +44,7 @@ export default function UsersPage() {
       setModalOpen(false);
       setError(null);
     },
-    onError: (err) => setError(err instanceof ApiError ? err.message : "Failed to create user"),
+    onError: (err) => setError(errorMessage(err, "Failed to create user")),
   });
 
   const updateUser = useMutation({
@@ -61,7 +61,7 @@ export default function UsersPage() {
       setError(null);
     },
     onError: (err) =>
-      setError(err instanceof ApiError ? err.message : "The user could not be saved."),
+      setError(errorMessage(err, "The user could not be saved.")),
   });
 
   const deactivateUser = useMutation({
@@ -72,7 +72,7 @@ export default function UsersPage() {
     },
     onError: (err) =>
       setError(
-        err instanceof ApiError ? err.message : "The account could not be deactivated.",
+        errorMessage(err, "The account could not be deactivated."),
       ),
   });
 
@@ -87,7 +87,7 @@ export default function UsersPage() {
     },
     onError: (err) =>
       setError(
-        err instanceof ApiError ? err.message : "The account could not be reactivated.",
+        errorMessage(err, "The account could not be reactivated."),
       ),
   });
 

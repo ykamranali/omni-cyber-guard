@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, KeyRound, Loader2, ShieldCheck, ShieldX, Users } from "lucide-react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import {
   IntegrationPanel, IntegrationState,
 } from "@/components/integrations/integration-panel";
@@ -98,7 +98,7 @@ export default function IdentityPage() {
       <div className="p-6">
         <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-400">
           <AlertTriangle className="h-5 w-5" />
-          {error instanceof ApiError ? error.message : "Identities could not be loaded."}
+          {errorMessage(error, "Identities could not be loaded.")}
         </div>
       </div>
     );

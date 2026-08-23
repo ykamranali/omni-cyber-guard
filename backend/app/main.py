@@ -7,9 +7,11 @@ execution, malware delivery, credential attack, or offensive capability is
 implemented or permitted anywhere in this codebase.
 """
 import logging
+import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -87,8 +89,52 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+class UnhandledErrorMiddleware(BaseHTTPMiddleware):
+    """
+    Turn an unhandled exception into a JSON 500 that the browser can read.
+
+    Without this, a route that raises produces a response assembled above the
+    CORS middleware, so it carries no Access-Control-Allow-Origin header. The
+    browser then refuses to hand the response to the page and `fetch` rejects
+    with a bare TypeError — the same rejection it gives when the server is
+    unreachable. The operator sees "could not reach the API" for a backend that
+    is running fine and answering every other request, and the actual 500 is
+    visible only in the container logs.
+
+    That is how a create-scan failure read as a dead API for two days.
+
+    This is registered before the CORS middleware, which makes it the inner of
+    the two: the response it produces travels back out through CORS and picks
+    up the headers it needs.
+
+    The body names an error id, not a traceback. The id is logged alongside the
+    stack so a report of "error 3f2a…" can be tied to the exact failure, and
+    outside production the exception class and message are included too, since
+    hiding them from a developer helps nobody.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        try:
+            return await call_next(request)
+        except Exception as exc:  # noqa: BLE001 — this is the catch-all by design
+            error_id = uuid.uuid4().hex[:12]
+            logger.exception(
+                "unhandled error %s on %s %s", error_id, request.method, request.url.path
+            )
+            detail = (
+                f"The server failed while handling this request (error {error_id}). "
+                f"The failure is recorded in the backend log."
+            )
+            if not settings.is_production:
+                detail += f" {type(exc).__name__}: {exc}"
+            return JSONResponse(status_code=500, content={"detail": detail})
+
+
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# Added first, so it ends up innermost — inside CORS, where its response can
+# still be given the headers the browser requires.
+app.add_middleware(UnhandledErrorMiddleware)
 app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(

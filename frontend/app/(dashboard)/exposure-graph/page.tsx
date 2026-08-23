@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -38,7 +38,7 @@ export default function ExposureGraphPage() {
       setError(null);
     } catch (err) {
       setError(
-        err instanceof ApiError ? err.message : "Could not load the exposure graph",
+        errorMessage(err, "Could not load the exposure graph"),
       );
     } finally {
       setLoading(false);

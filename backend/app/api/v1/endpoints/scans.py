@@ -5,6 +5,7 @@ any packet is sent. This platform has no offensive capability: it performs
 authorized host/service discovery only, and turns the real results into
 asset inventory + finding records.
 """
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
@@ -22,6 +23,8 @@ from app.schemas.scan import ScanJobCreate, ScanJobOut
 from app.services.network_scanner import validate_authorized_target, ScanAuthorizationError
 from app.services.scan_authorization import AuthorizationError, assert_target_authorized
 from app.services.audit import log_action
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/scans", tags=["Network Scans"])
 
@@ -144,36 +147,68 @@ def create_scan(
         status=ScanStatus.QUEUED,
     )
     db.add(job)
+    # flush, not commit: this assigns the primary key while the transaction is
+    # still open, so the identifier is in hand before anything can go wrong.
+    db.flush()
+    job_id = job.id
+    # Read while the instance is still loaded. After commit every attribute is
+    # expired, so touching one issues a fresh SELECT — the very query that was
+    # failing. Nothing after this point should have to reload the row to know
+    # what was requested.
+    job_target = job.target_cidr
+    job_engine = job.engine
     db.commit()
-    db.refresh(job)
+
+    # Nothing below may depend on reading this row back.
+    #
+    # The dispatch used to sit after `db.refresh(job)`, and when that refresh
+    # raised — as it did here with "Could not refresh instance" — the row was
+    # already committed but the task was never queued. The scan then sat at
+    # QUEUED forever with no error against it, because the code that records a
+    # dispatch failure had not been reached either. A row the operator can see
+    # and a job nobody will ever run is the worst of both outcomes.
+    #
+    # The refresh is now advisory: it repopulates server-side defaults for the
+    # response body, and if it fails the scan still gets dispatched.
+    reloaded = True
+    try:
+        db.refresh(job)
+    except Exception:  # noqa: BLE001
+        reloaded = False
+        logger.warning(
+            "could not reload scan job %s after commit; dispatching anyway", job_id,
+            exc_info=True,
+        )
 
     # Import locally to avoid importing Celery at API startup if the broker is
     # unreachable.
     from app.tasks.scan_tasks import run_network_scan
 
     try:
-        run_network_scan.delay(str(job.id))
+        run_network_scan.delay(str(job_id))
     except Exception as exc:  # noqa: BLE001 — broker down, auth failure, anything
         # A job that could not be handed to a worker must not sit at QUEUED
         # forever looking like it is about to start. This was the single most
         # confusing failure in the product: the row was committed, the dispatch
         # raised, and the Scan Centre showed "queued" indefinitely with nothing
         # anywhere saying why.
-        job.status = ScanStatus.FAILED
-        job.error_message = (
+        reason = (
             f"The scan could not be handed to a worker: {exc}. "
             f"Check that the Celery worker and Redis are running "
             f"(docker compose ps worker redis)."
         )
+        db.query(ScanJob).filter(ScanJob.id == job_id).update(
+            {"status": ScanStatus.FAILED, "error_message": reason},
+            synchronize_session=False,
+        )
         db.commit()
-        db.refresh(job)
-        raise HTTPException(status_code=503, detail=job.error_message)
+        raise HTTPException(status_code=503, detail=reason)
 
     log_action(
-        db, "start_scan", "scan_job", current_user.organization_id, current_user.id, str(job.id),
+        db, "start_scan", "scan_job", current_user.organization_id, current_user.id, str(job_id),
         metadata={
-            "target_cidr": job.target_cidr,
-            "engine": job.engine,
+            "target_cidr": job_target,
+            "engine": job_engine,
             "credentialed": credential_id is not None,
             "authorized_by_network": authorization.matched_network,
             "authorization_confirmed_by": str(current_user.id),
@@ -188,7 +223,7 @@ def create_scan(
     # notification was never delivered to anyone while the request reported
     # success.
     organization_key = str(current_user.organization_id)
-    target = job.target_cidr
+    target = job_target
 
     def send_ws_notification():
         asyncio.run(manager.broadcast_to_org(
@@ -198,7 +233,26 @@ def create_scan(
 
     background_tasks.add_task(send_ws_notification)
 
-    return job
+    if reloaded:
+        return job
+
+    # The refresh failed but the scan was created and dispatched. Answering
+    # with an error now would be a lie in the direction that costs most: the
+    # operator would start it again, and a second scan of the same range would
+    # already be running.
+    fresh = db.query(ScanJob).filter(ScanJob.id == job_id).first()
+    if fresh is not None:
+        return fresh
+
+    raise HTTPException(
+        status_code=500,
+        detail=(
+            f"Scan {job_id} was created and handed to a worker, but the API could not "
+            f"read the record back to return it. The scan is running — reload the Scan "
+            f"Centre rather than starting it again. This is a database read problem, not "
+            f"a scan failure; the backend log records the cause."
+        ),
+    )
 
 
 @router.get("/{scan_id}", response_model=ScanJobOut)

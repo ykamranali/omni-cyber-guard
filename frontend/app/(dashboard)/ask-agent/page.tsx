@@ -5,7 +5,7 @@ import {
   AlertTriangle, BrainCircuit, Check, ChevronDown, ChevronRight,
   Database, Loader2, Send, ShieldAlert, ShieldCheck, Sparkles, User, X,
 } from "lucide-react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 /**
@@ -194,7 +194,7 @@ function ProposalCard({
       );
       onDecided(updated);
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "The action could not be completed.");
+      setError(errorMessage(caught, "The action could not be completed."));
     } finally {
       setBusy(false);
     }
@@ -301,7 +301,7 @@ export default function AskAgentPage() {
       .then(setStatus)
       .catch((caught) =>
         setStatusError(
-          caught instanceof ApiError ? caught.message : "Could not read the assistant's status.",
+          errorMessage(caught, "Could not read the assistant's status."),
         ),
       );
   }, []);

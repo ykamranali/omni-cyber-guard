@@ -7,7 +7,7 @@ import {
   Settings2, ShieldBan, ShieldCheck, Trash2, Unlock, X,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { Modal } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
 
@@ -241,7 +241,7 @@ function FirewallModal({
       onSaved();
       onClose();
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "The firewall could not be saved.");
+      setError(errorMessage(caught, "The firewall could not be saved."));
     } finally {
       setPending(false);
     }
@@ -503,7 +503,7 @@ export default function InfrastructurePage() {
       setBlockError(null);
     },
     onError: (err) =>
-      setBlockError(err instanceof ApiError ? err.message : "The address could not be blocked."),
+      setBlockError(errorMessage(err, "The address could not be blocked.")),
   });
 
   const unblock = useMutation({
@@ -513,7 +513,7 @@ export default function InfrastructurePage() {
       setActionError(null);
     },
     onError: (err) =>
-      setActionError(err instanceof ApiError ? err.message : "The block could not be removed."),
+      setActionError(errorMessage(err, "The block could not be removed.")),
   });
 
   const testFirewall = useMutation({
@@ -527,7 +527,7 @@ export default function InfrastructurePage() {
       refresh();
       setTestResult(null);
       setActionError(
-        err instanceof ApiError ? err.message : "The firewall did not answer.",
+        errorMessage(err, "The firewall did not answer."),
       );
     },
   });
@@ -540,7 +540,7 @@ export default function InfrastructurePage() {
     },
     onError: (err) =>
       setActionError(
-        err instanceof ApiError ? err.message : "The integration could not be removed.",
+        errorMessage(err, "The integration could not be removed."),
       ),
   });
 

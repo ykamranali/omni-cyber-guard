@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AssetFormModal, AssetFormValues } from "@/components/assets/asset-form-modal";
 import { AssetDrawer } from "@/components/assets/asset-drawer";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 
 interface AssetOut {
@@ -109,7 +109,7 @@ export default function AssetsPage() {
       setFormError(null);
     },
     onError: (err) =>
-      setFormError(err instanceof ApiError ? err.message : "The asset could not be created."),
+      setFormError(errorMessage(err, "The asset could not be created.")),
   });
 
   const updateAsset = useMutation({
@@ -130,7 +130,7 @@ export default function AssetsPage() {
       setFormError(null);
     },
     onError: (err) =>
-      setFormError(err instanceof ApiError ? err.message : "The asset could not be saved."),
+      setFormError(errorMessage(err, "The asset could not be saved.")),
   });
 
   // Every delete previously had no onError at all, so a refusal — a role
@@ -144,7 +144,7 @@ export default function AssetsPage() {
     },
     onError: (err) =>
       setActionError(
-        err instanceof ApiError ? err.message : "The asset could not be deleted.",
+        errorMessage(err, "The asset could not be deleted."),
       ),
   });
 
@@ -157,7 +157,7 @@ export default function AssetsPage() {
     },
     onError: (err) =>
       setActionError(
-        err instanceof ApiError ? err.message : "The assets could not be deleted.",
+        errorMessage(err, "The assets could not be deleted."),
       ),
   });
 

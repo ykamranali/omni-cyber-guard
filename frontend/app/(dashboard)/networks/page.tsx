@@ -9,7 +9,7 @@ import {
 import { Topbar } from "@/components/layout/topbar";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface Site {
@@ -102,7 +102,7 @@ export default function NetworksPage() {
     },
     onError: (err) =>
       setActionError(
-        err instanceof ApiError ? err.message : "The site could not be deleted.",
+        errorMessage(err, "The site could not be deleted."),
       ),
   });
 
@@ -128,7 +128,7 @@ export default function NetworksPage() {
     // this the button simply did nothing and said nothing.
     onError: (err) =>
       setActionError(
-        err instanceof ApiError ? err.message : "The network could not be deleted.",
+        errorMessage(err, "The network could not be deleted."),
       ),
   });
 

@@ -6,7 +6,7 @@ import {
   AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, FileCheck2,
   HelpCircle, Loader2, MinusCircle, Play, Plus, ShieldQuestion, XCircle,
 } from "lucide-react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 /**
@@ -273,7 +273,7 @@ export default function CompliancePage() {
       setError(null);
     },
     onError: (caught) =>
-      setError(caught instanceof ApiError ? caught.message : "The pack could not be installed."),
+      setError(errorMessage(caught, "The pack could not be installed.")),
   });
 
   const assess = useMutation({
@@ -284,7 +284,7 @@ export default function CompliancePage() {
     },
     onError: (caught) =>
       setError(
-        caught instanceof ApiError ? caught.message : "The assessment could not be run.",
+        errorMessage(caught, "The assessment could not be run."),
       ),
   });
 

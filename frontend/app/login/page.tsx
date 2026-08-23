@@ -7,7 +7,7 @@ import { ShieldCheck, Lock, Mail, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { useAuthStore, CurrentUser } from "@/store/auth";
 
 interface TokenResponse {
@@ -37,7 +37,7 @@ export default function LoginPage() {
       setUser(me);
       router.push("/dashboard");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Unable to sign in. Please try again.");
+      setError(errorMessage(err, "Unable to sign in. Please try again."));
     } finally {
       setLoading(false);
     }

@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle, ChevronDown, ChevronRight, Info, Loader2, Route, Waypoints,
 } from "lucide-react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 /**
@@ -245,7 +245,7 @@ export default function AttackPathsPage() {
       {error && (
         <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-400">
           <AlertTriangle className="h-5 w-5" />
-          {error instanceof ApiError ? error.message : "Attack paths could not be loaded."}
+          {errorMessage(error, "Attack paths could not be loaded.")}
         </div>
       )}
 

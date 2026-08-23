@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Cloud, Loader2 } from "lucide-react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import {
   IntegrationPanel, IntegrationState,
@@ -70,7 +70,7 @@ export default function CloudAssetsPage() {
       <div className="p-6">
         <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-400">
           <AlertTriangle className="h-5 w-5" />
-          {error instanceof ApiError ? error.message : "Cloud inventory could not be loaded."}
+          {errorMessage(error, "Cloud inventory could not be loaded.")}
         </div>
       </div>
     );

@@ -12,7 +12,7 @@ import { WorkerStatusBanner } from "@/components/system/worker-status-banner";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 
 interface ScanScheduleOut {
   id: string;
@@ -146,7 +146,7 @@ export default function ScanCenterPage() {
       setScheduleName("");
       setScheduleCidr("");
     },
-    onError: (err) => setScheduleError(err instanceof ApiError ? err.message : "Failed to create schedule"),
+    onError: (err) => setScheduleError(errorMessage(err, "Failed to create schedule")),
   });
 
   const deleteSchedule = useMutation({
@@ -171,7 +171,7 @@ export default function ScanCenterPage() {
       setError(null);
       setCidr("");
     },
-    onError: (err) => setError(err instanceof ApiError ? err.message : "Failed to start scan"),
+    onError: (err) => setError(errorMessage(err, "Failed to start scan")),
   });
 
   const cancelScan = useMutation({
@@ -187,7 +187,7 @@ export default function ScanCenterPage() {
       queryClient.invalidateQueries({ queryKey: ["scans"] });
       setExpandedId(null);
     },
-    onError: (err) => setError(err instanceof ApiError ? err.message : "Failed to delete scan"),
+    onError: (err) => setError(errorMessage(err, "Failed to delete scan")),
   });
 
   const deleteBulkScans = useMutation({
@@ -212,7 +212,7 @@ export default function ScanCenterPage() {
         setError(null);
       }
     },
-    onError: (err) => setError(err instanceof ApiError ? err.message : "Failed to delete scans"),
+    onError: (err) => setError(errorMessage(err, "Failed to delete scans")),
   });
 
   const toggleScanSelection = (id: string) => {

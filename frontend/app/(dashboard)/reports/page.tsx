@@ -6,7 +6,7 @@ import {
   Activity, AlertTriangle, CheckCircle2, Download, FileBarChart2, Loader2,
   ShieldCheck,
 } from "lucide-react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 /**
@@ -91,9 +91,7 @@ export default function ReportsPage() {
       setErrors((previous) => ({
         ...previous,
         [report.id]:
-          caught instanceof ApiError
-            ? caught.message
-            : "The download did not complete.",
+          errorMessage(caught, "The download did not complete."),
       }));
     } finally {
       setBusy(null);
