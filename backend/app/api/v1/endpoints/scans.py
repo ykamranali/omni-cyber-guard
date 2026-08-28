@@ -342,19 +342,22 @@ def delete_scans_bulk(
     deleted: list[str] = []
     skipped: list[dict] = []
 
-    for job in jobs:
-        if job.status is ScanStatus.RUNNING:
+    # Read properties upfront to avoid ObjectDeletedError if log_action commits
+    job_records = [(job.id, job.status, job) for job in jobs]
+
+    for job_id, status, job in job_records:
+        if status is ScanStatus.RUNNING:
             skipped.append({
-                "id": str(job.id),
+                "id": str(job_id),
                 "reason": "The scan is still running. Cancel it before deleting.",
             })
             continue
         # A queued job never started, so there is nothing to interrupt and no
         # reason to make the operator cancel it first.
-        deleted.append(str(job.id))
+        deleted.append(str(job_id))
         log_action(
             db, "delete_scan", "scan_job", current_user.organization_id,
-            current_user.id, str(job.id), metadata={"status": job.status.value},
+            current_user.id, str(job_id), metadata={"status": status.value},
         )
         db.delete(job)
 
@@ -362,8 +365,9 @@ def delete_scans_bulk(
 
     missing = sorted(
         {str(identifier) for identifier in scan_ids}
-        - {str(job.id) for job in jobs}
+        - {str(job_id) for job_id, _, _ in job_records}
     )
+
     for identifier in missing:
         skipped.append({"id": identifier, "reason": "No such scan in this organization."})
 
