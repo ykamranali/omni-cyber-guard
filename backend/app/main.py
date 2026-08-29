@@ -21,6 +21,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.rate_limit import limiter
+from app.services.events import build_bridge
 from app.services.bootstrap import ensure_bootstrap_admin
 
 logger = logging.getLogger(__name__)
@@ -76,7 +77,19 @@ async def lifespan(app: FastAPI):
     # The API reads the events the worker recorded (see
     # app/services/threat_monitor.py).
 
-    yield
+    # Subscribe to the event channel so work finishing in the Celery worker can
+    # reach a browser. Without this the WebSocket carries almost nothing: the
+    # connection manager lives in this process's memory and the worker has no
+    # way to reach it, so every scan completion, discovery result and
+    # intelligence sync was invisible until the operator navigated somewhere.
+    bridge = build_bridge()
+    bridge.start()
+    app.state.event_bridge = bridge
+
+    try:
+        yield
+    finally:
+        await bridge.stop()
 
 
 app = FastAPI(

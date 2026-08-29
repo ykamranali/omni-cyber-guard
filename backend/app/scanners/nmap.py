@@ -11,6 +11,7 @@ operator's input is ever passed through a shell.
 """
 from __future__ import annotations
 
+import ipaddress
 import os
 
 from app.scanners.contract import (
@@ -24,6 +25,14 @@ from app.services.network_scanner import (
 )
 
 XML_FILENAME = "scan.xml"
+
+#: nmap's top-1000 port set. Covers every port in RISKY_PORTS plus the
+#: management and database services an exposure assessment is expected to find.
+TOP_PORTS = 1000
+
+#: At or below this many addresses, depth is affordable even when host
+#: discovery cannot work and every address has to be assumed up.
+SMALL_TARGET_ADDRESSES = 16
 
 
 class NmapScanner(SubprocessScannerAdapter):
@@ -83,6 +92,34 @@ class NmapScanner(SubprocessScannerAdapter):
     def preflight_notes(self, request: ScanRequest) -> list[str]:
         return assess_target(request.target).as_log_lines()
 
+    @staticmethod
+    def _address_count(target: str) -> int:
+        """How many addresses the target covers. 1 for a bare host or a URL."""
+        try:
+            return ipaddress.ip_network(target, strict=False).num_addresses
+        except ValueError:
+            return 1
+
+    def _port_selection(self, target: str, *, degraded: bool) -> list[str]:
+        """
+        How many ports to probe, decided by what the scan can afford.
+
+        The old command used -F: nmap's 100 most common ports. That misses a
+        great deal an exposure assessment should see — WinRM on 5985, Redis on
+        6379, PostgreSQL on 5432, Elasticsearch on 9200, VNC above 5900, and
+        most alternate HTTP ports. The top 1000 set covers all of those and
+        every port in RISKY_PORTS.
+
+        Depth costs time, and the cost multiplies by the number of addresses.
+        A single host gets the full set in either mode. A range gets it only
+        when discovery works, because a degraded scan has already assumed every
+        address is up and would spend the entire budget probing addresses that
+        do not exist.
+        """
+        if not degraded or self._address_count(target) <= SMALL_TARGET_ADDRESSES:
+            return ["--top-ports", str(TOP_PORTS)]
+        return ["-F"]
+
     def build_command(self, request: ScanRequest, context_dir: str) -> list[str]:
         xml_path = os.path.join(context_dir, XML_FILENAME)
 
@@ -102,10 +139,10 @@ class NmapScanner(SubprocessScannerAdapter):
                 "nmap",
                 "-Pn",
                 "-sV",
-                "-F",
+                *self._port_selection(request.target, degraded=True),
                 "-T4",
                 "--max-retries", "1",
-                "--host-timeout", "2m",
+                "--host-timeout", "4m",
                 "-v",
                 "-oX", xml_path,
                 request.target,
@@ -115,10 +152,10 @@ class NmapScanner(SubprocessScannerAdapter):
             "nmap",
             "-A",                       # OS detection, version detection, scripts, traceroute
             "--script", "vuln,default",
-            "-F",                       # fast port set
+            *self._port_selection(request.target, degraded=False),
             "-T4",
             "--max-retries", "1",
-            "--host-timeout", "5m",
+            "--host-timeout", "10m",
             "-v",                       # emit "Discovered ..." lines for the live log
             "-oX", xml_path,
             request.target,

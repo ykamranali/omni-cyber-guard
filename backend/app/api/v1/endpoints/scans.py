@@ -8,10 +8,8 @@ asset inventory + finding records.
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-import asyncio
-from app.services.websocket import manager
 
 from app.core.deps import get_db, require_permission
 from app.core.rbac import Permission
@@ -23,6 +21,7 @@ from app.schemas.scan import ScanJobCreate, ScanJobOut
 from app.services.network_scanner import validate_authorized_target, ScanAuthorizationError
 from app.services.scan_authorization import AuthorizationError, assert_target_authorized
 from app.services.audit import log_action
+from app.services.events import publish_event
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +62,6 @@ def list_engines(
 @router.post("", response_model=ScanJobOut, status_code=202)
 def create_scan(
     payload: ScanJobCreate,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(Permission.RUN_SCANS)),
 ):
@@ -215,23 +213,21 @@ def create_scan(
         },
     )
 
-    # Notify via WebSocket in background.
+    # Announce it on the event channel rather than reaching into this
+    # process's connection map directly.
     #
-    # The organization id is stringified here on purpose: connections are keyed
-    # by the `org_id` claim from the JWT, which is a string. Passing the UUID
-    # object meant every lookup in the connection map missed, so this
-    # notification was never delivered to anyone while the request reported
-    # success.
-    organization_key = str(current_user.organization_id)
-    target = job_target
-
-    def send_ws_notification():
-        asyncio.run(manager.broadcast_to_org(
-            organization_key,
-            {"type": "info", "message": f"Scan initiated for {target}"},
-        ))
-
-    background_tasks.add_task(send_ws_notification)
+    # The old version called manager.broadcast_to_org from a background task,
+    # which only ever reached browsers connected to this particular API
+    # process — fine with one container, wrong the moment there are two. It
+    # also meant this endpoint was the only thing in the entire platform that
+    # could send a WebSocket message at all. Everything now travels the same
+    # path: publish to Redis, and whichever API processes hold sockets for this
+    # organization deliver it.
+    publish_event(
+        current_user.organization_id, "scan_started",
+        message=f"Scan of {job_target} was queued.",
+        scan_job_id=str(job_id), engine=job_engine, target=job_target,
+    )
 
     if reloaded:
         return job

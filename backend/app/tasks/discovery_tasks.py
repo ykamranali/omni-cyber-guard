@@ -26,6 +26,7 @@ from app.db.session import SessionLocal
 from app.db.tenancy import set_tenant
 from app.models.discovery import AttackSurfaceDomain, CloudResource, IdentityProfile
 from app.models.integration import IntegrationKind, IntegrationState, IntegrationStatus
+from app.services.events import publish_event
 from app.services.integrations import cloud as cloud_integrations
 from app.services.integrations import identity as identity_integrations
 from app.services.integrations.base import AdapterError
@@ -75,6 +76,19 @@ def _record_state(
     state.records_discovered = records_discovered
     if status is IntegrationStatus.CONNECTED:
         state.last_success_at = now
+
+    # Every discovery outcome passes through here, so this is the one place
+    # that needs to announce it. The event carries the status rather than
+    # implying success: a browser refreshing on "discovery finished" must be
+    # able to render "not configured" as readily as a list of instances.
+    publish_event(
+        organization_id, "discovery_completed",
+        message=message,
+        kind=kind.value if hasattr(kind, "value") else str(kind),
+        provider=provider,
+        status=status.value if hasattr(status, "value") else str(status),
+        records_discovered=records_discovered,
+    )
     return state
 
 

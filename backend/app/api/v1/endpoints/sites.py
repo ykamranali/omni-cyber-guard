@@ -176,6 +176,28 @@ def update_network(
     network = _get_network(db, network_id, current_user)
     changes = payload.model_dump(exclude_unset=True)
 
+    # A range can now be edited, so it can now collide. Creation already
+    # refuses a duplicate; without the same check here two rows could claim the
+    # same CIDR and the authorization lookup would depend on which was found
+    # first.
+    new_cidr = changes.get("cidr")
+    if new_cidr and new_cidr != network.cidr:
+        clash = db.execute(
+            select(Network).where(
+                Network.organization_id == current_user.organization_id,
+                Network.cidr == new_cidr,
+                Network.id != network.id,
+            )
+        ).scalar_one_or_none()
+        if clash is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"{new_cidr} is already registered as '{clash.name}'.",
+            )
+
+    if "site_id" in changes and changes["site_id"] is not None:
+        _get_site(db, changes["site_id"], current_user)
+
     # Granting scan authorization is a decision worth attributing.
     if changes.get("is_authorized_scope") and not network.is_authorized_scope:
         network.authorized_by_user_id = current_user.id

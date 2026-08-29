@@ -19,6 +19,7 @@ from app.db.tenancy import bypass_tenant, set_tenant
 from app.models.organization import Organization
 from app.services.intel.sync import sync_all, sync_epss, sync_kev, sync_nvd
 from app.services.vulnerability_correlation import correlate_organization
+from app.services.events import publish_event
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +115,13 @@ def correlate_single_organization(organization_id: str) -> dict:
     try:
         org_uuid = _uuid.UUID(organization_id)
         set_tenant(db, org_uuid)
-        return correlate_organization(db, org_uuid).as_dict()
+        result = correlate_organization(db, org_uuid).as_dict()
+        publish_event(
+            org_uuid, "intel_synced",
+            message="Vulnerability intelligence was re-correlated against your inventory.",
+            **{k: v for k, v in result.items() if isinstance(v, (int, float, str, bool))},
+        )
+        return result
     finally:
         db.close()
 

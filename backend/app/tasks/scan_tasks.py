@@ -43,6 +43,7 @@ from app.scanners.contract import (
     ScanCredential, ScanRequest, ScannerAdapter, SessionState,
 )
 from app.services.credential_access import resolve_credential
+from app.services.events import publish_event
 from app.services.network_scanner import RISKY_PORTS, ScanAuthorizationError
 from app.services.exposure_engine import recompute_asset_exposure
 from app.services.remediation_engine import reopen_from_scan, verify_from_scan
@@ -55,7 +56,11 @@ PROGRESS_FLUSH_SECONDS = 2.0
 PROGRESS_FLUSH_LINES = 40
 MAX_RAW_SUMMARY_CHARS = 200_000
 CANCEL_POLL_SECONDS = 3.0
-SCAN_TIMEOUT_SECONDS = 1800
+# A /24 at top-1000 ports with OS detection and the vuln script set takes
+# well over half an hour. The previous 30-minute budget terminated such a
+# scan partway and recorded it as a timeout, which reads as a fault in the
+# scanner rather than a budget that was too small for what was asked.
+SCAN_TIMEOUT_SECONDS = 3600
 SESSION_POLL_SECONDS = 1.0
 
 #: Sentinel returned by _run_session when an operator cancelled the scan.
@@ -126,6 +131,14 @@ class ScanProgressReporter:
             job.raw_summary = (job.raw_summary or "") + chunk
             self._stored_chars = len(job.raw_summary)
             db.commit()
+            # Already rate-limited: flush runs at most every PROGRESS_FLUSH_SECONDS
+            # or every PROGRESS_FLUSH_LINES lines, so this cannot flood the
+            # channel with one message per line of nmap output.
+            publish_event(
+                job.organization_id, "scan_progress",
+                scan_job_id=str(job.id),
+                last_line=chunk.rstrip("\n").rsplit("\n", 1)[-1][:200],
+            )
         except Exception:
             db.rollback()
             logger.exception("scan %s: failed to persist progress output", self.scan_job_id)
@@ -443,6 +456,11 @@ def run_network_scan(scan_job_id: str) -> None:
 
         job.status = ScanStatus.RUNNING
         db.commit()
+        publish_event(
+            job.organization_id, "scan_started",
+            message=f"Scan of {job.target_cidr} started.",
+            scan_job_id=str(job.id), engine=job.engine, target=job.target_cidr,
+        )
 
         from app.scanners.manager import ScannerManager
 
@@ -591,6 +609,22 @@ def run_network_scan(scan_job_id: str) -> None:
         )
         db.commit()
 
+        publish_event(
+            job.organization_id,
+            "scan_completed" if job.status is ScanStatus.COMPLETED else "scan_failed",
+            message=(
+                f"Scan of {job.target_cidr} finished: {len(hosts)} live host(s), "
+                f"{created_total} new finding(s)."
+                if job.status is ScanStatus.COMPLETED
+                else f"Scan of {job.target_cidr} was cancelled; results were kept."
+            ),
+            scan_job_id=str(job.id),
+            status=job.status.value,
+            hosts_discovered=len(hosts),
+            findings_generated=created_total,
+            findings_resolved=resolved_total,
+        )
+
         # The inventory just changed, so the exposure graph and the attack
         # paths derived from it are stale. Dispatched rather than computed
         # inline so a slow rebuild cannot make a finished scan look unfinished,
@@ -617,6 +651,11 @@ def run_network_scan(scan_job_id: str) -> None:
                 job.status = ScanStatus.FAILED
                 job.error_message = f"Unexpected error: {exc}"
                 db.commit()
+                publish_event(
+                    job.organization_id, "scan_failed",
+                    message=f"Scan of {job.target_cidr} failed: {exc}",
+                    scan_job_id=str(job.id), error=str(exc),
+                )
         except Exception:
             logger.exception("scan %s: could not record the failure", scan_job_id)
         raise

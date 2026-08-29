@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.orm import Session
 
 # Tables carrying an organization_id, protected by an RLS policy.
@@ -75,21 +75,61 @@ TENANT_TABLES = (
 )
 
 
+#: Where a session records the scope it wants, so it can be re-applied to
+#: whatever connection the session is holding at the time.
+_SCOPE_KEY = "ocg_tenant_scope"
+
+_SET_SCOPE = text(
+    "SELECT set_config('app.current_org_id', :org, false), "
+    "set_config('app.rls_bypass', :bypass, false)"
+)
+
+
+def _remember(db: Session, org: str, bypass: str) -> None:
+    db.info[_SCOPE_KEY] = (org, bypass)
+    db.execute(_SET_SCOPE, {"org": org, "bypass": bypass})
+
+
+@event.listens_for(Session, "after_begin")
+def _reapply_scope(session: Session, transaction, connection) -> None:
+    """
+    Put the session's scope back on whatever connection it just acquired.
+
+    This is the fix for a bug that looked like several different bugs.
+
+    `set_config(..., is_local => false)` is state on one PostgreSQL *connection*,
+    not on the ORM Session. SQLAlchemy returns the connection to the pool when a
+    transaction ends, and takes one again for the next statement. So a request
+    that committed and then read anything back was working on a connection that
+    might have been handed to another request in between — and that request's
+    teardown calls `clear_tenant` on its way out, wiping the setting.
+
+    The session then had no `app.current_org_id`, row-level security correctly
+    hid every row including the one it had just written, and `db.refresh()`
+    raised "Could not refresh instance". It surfaced as scans stuck at queued,
+    sites and networks failing to save, and deletes reporting errors — all the
+    same fault, and all intermittent, because whether it happened depended on
+    pool contention. Under a quiet session the connection comes straight back
+    and nothing goes wrong, which is why it never reproduced on demand.
+
+    Re-applying on `after_begin` means the scope follows the session rather than
+    the connection, which is what the rest of the code always assumed.
+    """
+    scope = session.info.get(_SCOPE_KEY)
+    if scope is None:
+        return
+    org, bypass = scope
+    connection.execute(_SET_SCOPE, {"org": org, "bypass": bypass})
+
+
 def set_tenant(db: Session, organization_id: uuid.UUID | str) -> None:
     """Scope this session to one organization. Bypass is turned off."""
-    db.execute(
-        text("SELECT set_config('app.current_org_id', :org, false), "
-             "set_config('app.rls_bypass', 'off', false)"),
-        {"org": str(organization_id)},
-    )
+    _remember(db, str(organization_id), "off")
 
 
 def bypass_tenant(db: Session) -> None:
     """Allow this session to span tenants. Use only where documented above."""
-    db.execute(
-        text("SELECT set_config('app.current_org_id', '', false), "
-             "set_config('app.rls_bypass', 'on', false)")
-    )
+    _remember(db, "", "on")
 
 
 def clear_tenant(db: Session) -> None:
@@ -100,10 +140,7 @@ def clear_tenant(db: Session) -> None:
     neither setting present the policies match no rows at all, so a leaked
     connection cannot expose data.
     """
-    db.execute(
-        text("SELECT set_config('app.current_org_id', '', false), "
-             "set_config('app.rls_bypass', 'off', false)")
-    )
+    _remember(db, "", "off")
 
 
 def current_scope(db: Session) -> dict[str, str]:

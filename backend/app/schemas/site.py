@@ -76,9 +76,25 @@ class NetworkCreate(BaseModel):
 
 class NetworkUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
+    # Editing a range was impossible: this model had no cidr field, and Pydantic
+    # discards unknown keys rather than complaining, so the edit form appeared
+    # to save and the range never moved.
+    cidr: str | None = None
     site_id: uuid.UUID | None = None
     vlan_id: int | None = Field(default=None, ge=0, le=4094)
     description: str | None = None
     is_internet_facing: bool | None = None
     is_authorized_scope: bool | None = None
     authorization_note: str | None = None
+
+    @field_validator("cidr")
+    @classmethod
+    def valid_cidr(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        import ipaddress
+
+        try:
+            return str(ipaddress.ip_network(value.strip(), strict=False))
+        except ValueError as exc:
+            raise ValueError(f"'{value}' is not a valid CIDR range.") from exc

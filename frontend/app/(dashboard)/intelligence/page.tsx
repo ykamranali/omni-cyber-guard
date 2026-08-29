@@ -33,7 +33,10 @@ export default function CorrelatedIntelligencePage() {
   useEffect(() => {
     async function fetchInsights() {
       try {
-        const res = await api.get<Insight[]>("/intelligence");
+        // The router's prefix is /intelligence and its only route is /insights,
+        // so the correlated-insight list lives at /intelligence/insights.
+        // Requesting the prefix alone returned 404 on every load.
+        const res = await api.get<Insight[]>("/intelligence/insights");
         setInsights(res);
       } catch (error) {
         console.error("Failed to load intelligence:", error);

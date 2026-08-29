@@ -14,7 +14,7 @@ from app.services.scan_authorization import AuthorizationError, assert_target_au
 
 router = APIRouter()
 
-@router.get("/", response_model=list[ScanScheduleResponse])
+@router.get("", response_model=list[ScanScheduleResponse])
 def list_schedules(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(Permission.VIEW_ASSETS)),
