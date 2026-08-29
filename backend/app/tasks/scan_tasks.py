@@ -24,7 +24,9 @@ import concurrent.futures
 import logging
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import and_ as sa_and, or_ as sa_or
 
 from app.core.celery_app import celery_app
 from app.db.session import SessionLocal
@@ -56,6 +58,15 @@ PROGRESS_FLUSH_SECONDS = 2.0
 PROGRESS_FLUSH_LINES = 40
 MAX_RAW_SUMMARY_CHARS = 200_000
 CANCEL_POLL_SECONDS = 3.0
+
+#: How often a running scan proves it is still alive. Frequent enough that an
+#: orphan is noticed quickly, rare enough to be one small UPDATE a minute.
+HEARTBEAT_SECONDS = 30.0
+
+#: A RUNNING job whose heartbeat is older than this has no worker behind it.
+#: Comfortably more than HEARTBEAT_SECONDS so that a busy worker, a slow write
+#: or a brief database hiccup is never mistaken for a dead one.
+ORPHAN_AFTER_SECONDS = 300.0
 # A /24 at top-1000 ports with OS detection and the vuln script set takes
 # well over half an hour. The previous 30-minute budget terminated such a
 # scan partway and recorded it as a timeout, which reads as a fault in the
@@ -168,6 +179,30 @@ class ScanProgressReporter:
 # Adapter session driver
 # ---------------------------------------------------------------------------
 
+def _touch_heartbeat(scan_job_id: uuid.UUID) -> None:
+    """
+    Record that this scan is still alive.
+
+    Deliberately its own short-lived session: the scan's main session is busy
+    for the whole run, and a heartbeat that shares it would be invisible until
+    that transaction ended — which is exactly when it stops mattering.
+    """
+    db = SessionLocal()
+    try:
+        bypass_tenant(db)
+        db.query(ScanJob).filter(ScanJob.id == scan_job_id).update(
+            {"heartbeat_at": datetime.now(timezone.utc)}, synchronize_session=False
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        # A missed heartbeat is not worth failing a working scan over. Several
+        # missed in a row is what the reaper acts on.
+        logger.warning("scan %s: heartbeat could not be recorded", scan_job_id, exc_info=True)
+    finally:
+        db.close()
+
+
 def _run_session(scanner: ScannerAdapter, request: ScanRequest, reporter: "ScanProgressReporter"):
     """
     Drive one adapter session to completion.
@@ -183,6 +218,7 @@ def _run_session(scanner: ScannerAdapter, request: ScanRequest, reporter: "ScanP
 
         return ScannerResult(target=request.target, scanner_name=scanner.name, error=str(exc))
 
+    last_heartbeat = 0.0
     while True:
         progress = scanner.get_status(session)
         if progress.finished:
@@ -190,6 +226,12 @@ def _run_session(scanner: ScannerAdapter, request: ScanRequest, reporter: "ScanP
         if reporter.cancel_requested():
             scanner.cancel_scan(session)
             return CANCELED
+
+        now = time.monotonic()
+        if now - last_heartbeat >= HEARTBEAT_SECONDS:
+            last_heartbeat = now
+            _touch_heartbeat(reporter.scan_job_id)
+
         time.sleep(SESSION_POLL_SECONDS)
 
     if progress.state is SessionState.CANCELED:
@@ -455,6 +497,7 @@ def run_network_scan(scan_job_id: str) -> None:
             return
 
         job.status = ScanStatus.RUNNING
+        job.heartbeat_at = datetime.now(timezone.utc)
         db.commit()
         publish_event(
             job.organization_id, "scan_started",
@@ -715,3 +758,77 @@ def _run_nuclei(db, job: ScanJob, asset: Asset, host, nuclei_scanner, observed_a
         db, job.organization_id, asset.id, "nuclei", ingest.fingerprints, job.id, observed_at
     )
     return ingest.created
+
+
+@celery_app.task(name="scan_tasks.reap_orphaned_scans")
+def reap_orphaned_scans() -> dict:
+    """
+    Close out scans whose worker is gone.
+
+    Cancellation is cooperative: the API sets cancel_requested and the worker,
+    polling, stops the scanner. Nothing in that design covers the worker itself
+    disappearing — a restart, a deploy, an out-of-memory kill. The scanner
+    process dies with it, the row stays at RUNNING, and because the time budget
+    is enforced inside the task, nothing enforces it either. The operator sees a
+    scan running for hours and a Stop button that appears to do nothing, because
+    the flag it sets has no reader.
+
+    A running scan touches heartbeat_at every half minute. A RUNNING row whose
+    heartbeat stopped is therefore not a slow scan — it is an abandoned one, and
+    it is recorded as failed with the reason rather than left to look busy.
+
+    Whatever partial results the scan wrote before it died are kept. They were
+    really observed; it is the completeness of the scan that is in doubt, and
+    that is what the message says.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=ORPHAN_AFTER_SECONDS)
+
+    db = SessionLocal()
+    try:
+        bypass_tenant(db)
+        stranded = (
+            db.query(ScanJob)
+            .filter(
+                ScanJob.status == ScanStatus.RUNNING,
+                # A job that never recorded a first heartbeat is only stranded
+                # once it is older than the window too; otherwise a scan caught
+                # in the second between starting and its first beat is reaped.
+                sa_or(
+                    ScanJob.heartbeat_at < cutoff,
+                    sa_and(ScanJob.heartbeat_at.is_(None), ScanJob.created_at < cutoff),
+                ),
+            )
+            .all()
+        )
+
+        reaped = []
+        for job in stranded:
+            job.status = ScanStatus.FAILED
+            job.error_message = (
+                "The worker running this scan stopped before it finished — most often a "
+                "restart or a deploy. Anything already recorded was really observed, but "
+                "the scan did not cover its whole target, so treat the result as partial. "
+                "Start it again when the worker is back."
+            )
+            job.raw_summary = (job.raw_summary or "") + (
+                "\n[orphaned] No heartbeat from the worker for over "
+                f"{int(ORPHAN_AFTER_SECONDS // 60)} minutes; the scan was marked failed.\n"
+            )
+            reaped.append(str(job.id))
+            publish_event(
+                job.organization_id, "scan_failed",
+                message=f"Scan of {job.target_cidr} was abandoned when its worker stopped.",
+                scan_job_id=str(job.id), reason="orphaned",
+            )
+
+        if reaped:
+            db.commit()
+            logger.warning("reaped %d orphaned scan(s): %s", len(reaped), ", ".join(reaped))
+
+        return {"reaped": reaped}
+    except Exception:
+        db.rollback()
+        logger.exception("orphaned-scan sweep failed")
+        raise
+    finally:
+        db.close()

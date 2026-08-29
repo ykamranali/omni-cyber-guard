@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 from enum import Enum as PyEnum
-from sqlalchemy import String, ForeignKey, Enum, Text, Integer, Boolean
+from sqlalchemy import DateTime, String, ForeignKey, Enum, Text, Integer, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -51,6 +52,16 @@ class ScanJob(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # running scanner subprocess. A cancelled scan reports CANCELED, never
     # COMPLETED and never FAILED.
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+    #: Touched by the worker while the scan is actually running.
+    #:
+    #: Cancellation is cooperative — the worker polls cancel_requested — so a
+    #: job whose worker died has nobody to act on it and would sit at RUNNING
+    #: forever with a Stop button that does nothing. A stale heartbeat is how
+    #: the platform tells "still working" apart from "nobody is holding this".
+    heartbeat_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     hosts_discovered: Mapped[int] = mapped_column(Integer, default=0)
     findings_generated: Mapped[int] = mapped_column(Integer, default=0)

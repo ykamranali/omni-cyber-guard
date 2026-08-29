@@ -38,6 +38,13 @@ celery_app.conf.beat_schedule = {
         "task": "scheduler_tasks.check_schedules",
         "schedule": crontab(minute="*"),
     },
+    # Closes out scans whose worker stopped. Without it a restart mid-scan
+    # leaves a row at RUNNING for ever, and the Stop button has no reader for
+    # the flag it sets.
+    "reap-orphaned-scans-every-five-minutes": {
+        "task": "scan_tasks.reap_orphaned_scans",
+        "schedule": crontab(minute="*/5"),
+    },
     # KEV is small and changes on CISA's schedule; checking twice a day keeps
     # newly-listed exploited vulnerabilities from sitting unnoticed.
     "sync-kev-twice-daily": {

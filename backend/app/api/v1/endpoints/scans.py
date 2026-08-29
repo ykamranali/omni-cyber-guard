@@ -7,6 +7,7 @@ asset inventory + finding records.
 """
 import logging
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -304,6 +305,30 @@ def cancel_scan(
         # Nothing has started yet, so this is immediately true.
         job.status = ScanStatus.CANCELED
         job.error_message = "Cancelled before the scan started."
+    else:
+        # RUNNING. Cancellation is cooperative: setting the flag only works if
+        # a worker is still polling it. When the worker that owned this scan is
+        # gone — a restart, a deploy, a kill — nothing will ever read the flag,
+        # and the operator would press Stop, get a success, and watch the row
+        # stay at RUNNING indefinitely.
+        #
+        # A live scan touches heartbeat_at every half minute, so a stale one
+        # means nobody is holding this job and it can be stopped here and now.
+        from app.tasks.scan_tasks import ORPHAN_AFTER_SECONDS
+
+        last_seen = job.heartbeat_at or job.created_at
+        if last_seen is not None:
+            if last_seen.tzinfo is None:
+                last_seen = last_seen.replace(tzinfo=timezone.utc)
+            silent_for = (datetime.now(timezone.utc) - last_seen).total_seconds()
+            if silent_for > ORPHAN_AFTER_SECONDS:
+                job.status = ScanStatus.CANCELED
+                job.error_message = (
+                    f"Cancelled. The worker running this scan had not reported for "
+                    f"{int(silent_for // 60)} minutes, so it had already stopped — most "
+                    f"often a restart or a deploy. Anything recorded before then was "
+                    f"really observed, but the scan did not finish its target."
+                )
 
     db.commit()
     db.refresh(job)
